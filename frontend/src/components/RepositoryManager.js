@@ -27,7 +27,9 @@ import {
   Radio,
   Box
 } from '@mui/material';
-import { Add as AddIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import { Add as AddIcon, Refresh as RefreshIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import CloneProgressDialog from './CloneProgressDialog';
+import DeleteConfirmDialog from './DeleteConfirmDialog';
 
 const RepositoryManager = ({ repositories, onRepoAdded }) => {
   const [open, setOpen] = useState(false);
@@ -41,6 +43,9 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [cloneProgress, setCloneProgress] = useState({ open: false, repositoryName: '' });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, repository: null });
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,15 +94,21 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
       }
 
       const result = await response.json();
-      const successMessage = result.cloned 
-        ? `Repository "${result.name}" cloned and added successfully!`
-        : `Repository "${result.name}" added successfully!`;
       
-      setSuccess(successMessage);
-      setFormData({ name: '', path: '', url: '', clone_to_path: '' });
-      setRepoSource('local');
-      setOpen(false);
-      onRepoAdded();
+      if (result.cloning) {
+        // Show progress dialog for clone operations
+        setCloneProgress({ open: true, repositoryName: formData.name });
+        setFormData({ name: '', path: '', url: '', clone_to_path: '' });
+        setRepoSource('local');
+        setOpen(false);
+      } else {
+        // Local repository added successfully
+        setSuccess(`Repository "${result.name}" added successfully!`);
+        setFormData({ name: '', path: '', url: '', clone_to_path: '' });
+        setRepoSource('local');
+        setOpen(false);
+        onRepoAdded();
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -122,6 +133,47 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCloneComplete = (success) => {
+    setCloneProgress({ open: false, repositoryName: '' });
+    if (success) {
+      setSuccess('Repository cloned and added successfully!');
+      onRepoAdded();
+    }
+  };
+
+  const handleDeleteClick = (repository) => {
+    setDeleteDialog({ open: true, repository });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteDialog.repository) return;
+    
+    setDeleteLoading(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/repositories/${deleteDialog.repository.id}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete repository');
+      }
+      
+      const result = await response.json();
+      setSuccess(result.message);
+      setDeleteDialog({ open: false, repository: null });
+      onRepoAdded(); // Refresh the repository list
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialog({ open: false, repository: null });
   };
 
   return (
@@ -168,9 +220,9 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Name</TableCell>
-                    <TableCell>Path</TableCell>
-                    <TableCell>URL</TableCell>
+                    <TableCell>Repository Name</TableCell>
+                    <TableCell>Repository Path</TableCell>
+                    <TableCell>Repository URL</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Last Analyzed</TableCell>
                     <TableCell>Actions</TableCell>
@@ -215,15 +267,27 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<RefreshIcon />}
-                          onClick={() => handleAnalyze(repo.id)}
-                          disabled={loading}
-                        >
-                          Analyze
-                        </Button>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<RefreshIcon />}
+                            onClick={() => handleAnalyze(repo.id)}
+                            disabled={loading}
+                          >
+                            Analyze
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DeleteIcon />}
+                            onClick={() => handleDeleteClick(repo)}
+                            disabled={loading}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -338,6 +402,23 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
           </DialogActions>
         </form>
       </Dialog>
+
+      {/* Clone Progress Dialog */}
+      <CloneProgressDialog
+        open={cloneProgress.open}
+        repositoryName={cloneProgress.repositoryName}
+        onClose={() => setCloneProgress({ open: false, repositoryName: '' })}
+        onComplete={handleCloneComplete}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDialog.open}
+        repositoryName={deleteDialog.repository?.name || ''}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        loading={deleteLoading}
+      />
     </div>
   );
 };

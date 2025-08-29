@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import {
   AppBar,
   Toolbar,
@@ -34,11 +35,11 @@ const theme = createTheme({
 });
 
 function App() {
-  const [currentView, setCurrentView] = useState('dashboard');
   const [repositories, setRepositories] = useState([]);
   const [selectedRepo, setSelectedRepo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const location = useLocation();
 
   useEffect(() => {
     fetchRepositories();
@@ -86,14 +87,18 @@ function App() {
             </Typography>
             <Button 
               color="inherit" 
-              onClick={() => setCurrentView('dashboard')}
+              component={Link}
+              to="/"
               sx={{ mr: 2 }}
+              variant={location.pathname === '/' ? 'outlined' : 'text'}
             >
               Dashboard
             </Button>
             <Button 
               color="inherit" 
-              onClick={() => setCurrentView('repositories')}
+              component={Link}
+              to="/repositories"
+              variant={location.pathname === '/repositories' ? 'outlined' : 'text'}
             >
               Repositories
             </Button>
@@ -107,73 +112,75 @@ function App() {
             </Alert>
           )}
 
-          {currentView === 'dashboard' && (
-            <>
-              {repositories.length > 0 && (
-                <Card sx={{ mb: 3 }}>
-                  <CardContent>
-                    <Grid container spacing={2} alignItems="center">
-                      <Grid item xs={12} sm={6}>
-                        <FormControl fullWidth>
-                          <InputLabel>Select Repository</InputLabel>
-                          <Select
-                            value={selectedRepo?.id || ''}
-                            onChange={(e) => {
-                              const repo = repositories.find(r => r.id === e.target.value);
-                              setSelectedRepo(repo);
-                            }}
-                            label="Select Repository"
-                          >
-                            {repositories.map((repo) => (
-                              <MenuItem key={repo.id} value={repo.id}>
-                                {repo.name}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
+          <Routes>
+            <Route path="/" element={
+              <>
+                {repositories.length > 0 && (
+                  <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Grid container spacing={2} alignItems="center">
+                        <Grid item xs={12} sm={6}>
+                          <FormControl fullWidth>
+                            <InputLabel>Select Repository</InputLabel>
+                            <Select
+                              value={selectedRepo?.id || ''}
+                              onChange={(e) => {
+                                const repo = repositories.find(r => r.id === e.target.value);
+                                setSelectedRepo(repo);
+                              }}
+                              label="Select Repository"
+                            >
+                              {repositories.map((repo) => (
+                                <MenuItem key={repo.id} value={repo.id}>
+                                  {repo.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedRepo?.last_analyzed 
+                              ? `Last analyzed: ${new Date(selectedRepo.last_analyzed).toLocaleString()}`
+                              : 'Not analyzed yet'
+                            }
+                          </Typography>
+                        </Grid>
                       </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="body2" color="text.secondary">
-                          {selectedRepo?.last_analyzed 
-                            ? `Last analyzed: ${new Date(selectedRepo.last_analyzed).toLocaleString()}`
-                            : 'Not analyzed yet'
-                          }
-                        </Typography>
-                      </Grid>
-                    </Grid>
-                  </CardContent>
-                </Card>
-              )}
+                    </CardContent>
+                  </Card>
+                )}
 
-              {selectedRepo ? (
-                <Dashboard repository={selectedRepo} />
-              ) : (
-                <Card>
-                  <CardContent sx={{ textAlign: 'center', py: 8 }}>
-                    <Typography variant="h5" gutterBottom>
-                      No Repositories Available
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                      Add a repository to start tracking commits and analyzing developer metrics.
-                    </Typography>
-                    <Button 
-                      variant="contained" 
-                      onClick={() => setCurrentView('repositories')}
-                    >
-                      Add Repository
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
-
-          {currentView === 'repositories' && (
-            <RepositoryManager 
-              repositories={repositories}
-              onRepoAdded={handleRepoAdded}
-            />
-          )}
+                {selectedRepo ? (
+                  <Dashboard repository={selectedRepo} />
+                ) : (
+                  <Card>
+                    <CardContent sx={{ textAlign: 'center', py: 8 }}>
+                      <Typography variant="h5" gutterBottom>
+                        No Repositories Available
+                      </Typography>
+                      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+                        Add a repository to start tracking commits and analyzing developer metrics.
+                      </Typography>
+                      <Button 
+                        variant="contained" 
+                        component={Link}
+                        to="/repositories"
+                      >
+                        Add Repository
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            } />
+            <Route path="/repositories" element={
+              <RepositoryManager 
+                repositories={repositories}
+                onRepoAdded={handleRepoAdded}
+              />
+            } />
+          </Routes>
         </Container>
       </div>
     </ThemeProvider>
