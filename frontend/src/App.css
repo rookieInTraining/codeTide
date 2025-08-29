@@ -1,0 +1,64 @@
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+.metric-summary {
+  display: flex;
+  justify-content: space-around;
+  margin: 20px 0;
+}
+
+.metric-item {
+  text-align: center;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  min-width: 120px;
+}
+
+.metric-value {
+  font-size: 2em;
+  font-weight: bold;
+  color: #1976d2;
+}
+
+.metric-label {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 5px;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+
+.contributors-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.contributors-table th,
+.contributors-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.contributors-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
