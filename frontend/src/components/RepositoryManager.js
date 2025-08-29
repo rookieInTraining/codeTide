@@ -27,9 +27,10 @@ import {
   Radio,
   Box
 } from '@mui/material';
-import { Add as AddIcon, Refresh as RefreshIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Add as AddIcon, Refresh as RefreshIcon, Delete as DeleteIcon, GetApp as PullIcon } from '@mui/icons-material';
 import CloneProgressDialog from './CloneProgressDialog';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import PullProgressDialog from './PullProgressDialog';
 
 const RepositoryManager = ({ repositories, onRepoAdded }) => {
   const [open, setOpen] = useState(false);
@@ -43,9 +44,15 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [cloneProgressOpen, setCloneProgressOpen] = useState(false);
+  const [cloneRepositoryName, setCloneRepositoryName] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [repositoryToDelete, setRepositoryToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pullProgressOpen, setPullProgressOpen] = useState(false);
+  const [pullRepositoryName, setPullRepositoryName] = useState('');
   const [cloneProgress, setCloneProgress] = useState({ open: false, repositoryName: '' });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, repository: null });
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -176,6 +183,43 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
     setDeleteDialog({ open: false, repository: null });
   };
 
+  const handlePullClick = (repository) => {
+    setPullRepositoryName(repository.name);
+    setPullProgressOpen(true);
+    
+    // Start the pull operation
+    fetch(`http://localhost:5000/api/repositories/${repository.id}/pull`, {
+      method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (!data.error) {
+        console.log('Pull operation initiated:', data);
+      } else {
+        setError(data.error);
+        setPullProgressOpen(false);
+      }
+    })
+    .catch(err => {
+      setError(`Failed to start pull operation: ${err.message}`);
+      setPullProgressOpen(false);
+    });
+  };
+
+  const handlePullComplete = (success, commitsPulled) => {
+    setPullProgressOpen(false);
+    setPullRepositoryName('');
+    
+    if (success) {
+      if (commitsPulled > 0) {
+        setSuccess(`Successfully pulled ${commitsPulled} new commits! You may want to re-analyze the repository to update metrics.`);
+      } else {
+        setSuccess('Repository is already up to date.');
+      }
+      onRepoAdded(); // Refresh the repository list
+    }
+  };
+
   return (
     <div>
       <Grid container spacing={3} alignItems="center" sx={{ mb: 3 }}>
@@ -276,6 +320,16 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                             disabled={loading}
                           >
                             Analyze
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                            startIcon={<PullIcon />}
+                            onClick={() => handlePullClick(repo)}
+                            disabled={loading}
+                          >
+                            Pull
                           </Button>
                           <Button
                             size="small"
@@ -409,6 +463,14 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
         repositoryName={cloneProgress.repositoryName}
         onClose={() => setCloneProgress({ open: false, repositoryName: '' })}
         onComplete={handleCloneComplete}
+      />
+
+      {/* Pull Progress Dialog */}
+      <PullProgressDialog
+        open={pullProgressOpen}
+        repositoryName={pullRepositoryName}
+        onClose={() => setPullProgressOpen(false)}
+        onComplete={handlePullComplete}
       />
 
       {/* Delete Confirmation Dialog */}

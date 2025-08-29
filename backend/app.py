@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
 import os
-from models import create_database, Repository, Contributor, Commit
+from models import create_database, Repository, Contributor, Commit, CommitFile, MetricSnapshot
 from git_analyzer import GitAnalyzer
 from metrics_calculator import MetricsCalculator
 from datetime import datetime
@@ -17,7 +17,7 @@ engine, Session = create_database()
 session = Session()
 
 # Initialize analyzers
-git_analyzer = GitAnalyzer(session)
+git_analyzer = GitAnalyzer(session, socketio)
 metrics_calculator = MetricsCalculator(session)
 
 @app.route('/api/health', methods=['GET'])
@@ -83,10 +83,25 @@ def add_repository():
             if existing_by_path:
                 return jsonify({'error': 'A repository already exists at this path'}), 409
         
-        # Clone the repository
-        success, clone_msg = git_analyzer.clone_repository(git_url, final_path)
-        if not success:
-            return jsonify({'error': f'Failed to clone repository: {clone_msg}'}), 500
+        # Create repository record first (before cloning)
+        repo = Repository(
+            name=data['name'],
+            path=final_path,
+            url=git_url
+        )
+        session.add(repo)
+        session.commit()
+        
+        # Start async clone operation
+        clone_thread = git_analyzer.clone_repository_async(git_url, final_path)
+        
+        # Return immediately with clone started status
+        return jsonify({
+            'id': repo.id,
+            'message': 'Clone operation started',
+            'cloning': True,
+            'clone_path': final_path
+        }), 202
     
     # Scenario 3: Local path provided but doesn't exist
     elif local_path:
@@ -95,15 +110,15 @@ def add_repository():
     else:
         return jsonify({'error': 'Either a valid local path or git URL must be provided'}), 400
     
-    # Final validation of the repository
+    # Final validation of the repository (for local repos only)
     if not os.path.exists(final_path) or not os.path.exists(os.path.join(final_path, '.git')):
         return jsonify({'error': 'Final repository path is not a valid git repository'}), 400
     
-    # Create repository record
+    # Create repository record (for local repos)
     repo = Repository(
         name=data['name'],
         path=final_path,
-        url=git_url or data.get('url', '')
+        url=''
     )
     
     session.add(repo)
@@ -115,7 +130,7 @@ def add_repository():
         'path': repo.path,
         'url': repo.url,
         'message': 'Repository added successfully',
-        'cloned': bool(git_url)
+        'cloned': False
     }), 201
 
 @app.route('/api/repositories/<int:repo_id>/analyze', methods=['POST'])
@@ -139,6 +154,66 @@ def analyze_repository(repo_id):
     
     except Exception as e:
         return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
+
+@app.route('/api/repositories/<int:repo_id>/pull', methods=['POST'])
+def pull_repository(repo_id):
+    repo = session.query(Repository).get(repo_id)
+    if not repo:
+        return jsonify({'error': 'Repository not found'}), 404
+    
+    try:
+        # Initialize analyzer with socketio for progress tracking
+        analyzer = GitAnalyzer(session, socketio)
+        
+        # Pull latest changes
+        success, message, commits_pulled = analyzer.pull_repository(repo.path)
+        
+        if success:
+            return jsonify({
+                'message': message,
+                'commits_pulled': commits_pulled,
+                'repository': {
+                    'id': repo.id,
+                    'name': repo.name,
+                    'path': repo.path
+                }
+            })
+        else:
+            return jsonify({'error': message}), 400
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to pull repository: {str(e)}'}), 500
+
+@app.route('/api/repositories/<int:repo_id>', methods=['DELETE'])
+def delete_repository(repo_id):
+    repo = session.query(Repository).get(repo_id)
+    if not repo:
+        return jsonify({'error': 'Repository not found'}), 404
+    
+    try:
+        # Delete associated commit files first
+        commit_ids = session.query(Commit.id).filter_by(repository_id=repo_id).all()
+        commit_ids = [c.id for c in commit_ids]
+        
+        if commit_ids:
+            session.query(CommitFile).filter(CommitFile.commit_id.in_(commit_ids)).delete(synchronize_session=False)
+        
+        # Delete commits
+        session.query(Commit).filter_by(repository_id=repo_id).delete()
+        
+        # Delete metric snapshots
+        session.query(MetricSnapshot).filter_by(repository_id=repo_id).delete()
+        
+        # Delete repository
+        session.delete(repo)
+        session.commit()
+        
+        return jsonify({
+            'message': f'Repository "{repo.name}" and all associated data deleted successfully'
+        })
+    except Exception as e:
+        session.rollback()
+        return jsonify({'error': f'Failed to delete repository: {str(e)}'}), 500
 
 @app.route('/api/metrics/velocity', methods=['GET'])
 def get_velocity_metrics():
