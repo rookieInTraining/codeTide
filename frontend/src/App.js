@@ -1,26 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import {
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
   AppBar,
   Toolbar,
   Typography,
   Container,
-  Grid,
+  Button,
+  Alert,
   Card,
   CardContent,
-  Button,
-  Select,
-  MenuItem,
+  Grid,
   FormControl,
   InputLabel,
-  Alert,
-  CircularProgress,
-  Box
+  Select,
+  MenuItem,
+  Box,
+  CircularProgress
 } from '@mui/material';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
 import Dashboard from './components/Dashboard';
 import RepositoryManager from './components/RepositoryManager';
+import Logo from './components/Logo';
 import './App.css';
 
 const theme = createTheme({
@@ -82,6 +84,7 @@ function App() {
       <div className="App">
         <AppBar position="static">
           <Toolbar>
+            <Logo size={32} color="#ffffff" />
             <Typography 
               variant="h6" 
               component="div" 

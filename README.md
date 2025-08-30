@@ -139,7 +139,126 @@ conda env update -f backend/environment.yml
 conda env remove -n commit-tracker
 ```
 
-### Dependencies
+## Testing
+
+### Project Structure
+```
+CodeTide/
+├── backend/
+│   ├── tests/                    # Backend test files
+│   │   ├── __init__.py
+│   │   ├── test_metrics_calculator.py
+│   │   └── test_git_analyzer.py
+│   └── requirements-test.txt
+└── frontend/
+    └── src/
+        └── __tests__/            # Frontend test files
+            ├── App.test.js
+            ├── Dashboard.test.js
+            ├── Logo.test.js
+            └── RepositoryManager.test.js
+```
+
+### Backend Tests (Python)
+
+#### Setup Test Environment
+```bash
+# Activate your conda environment
+conda activate commit-tracker
+
+# Install test dependencies
+cd backend
+pip install -r requirements-test.txt
+```
+
+#### Run Backend Tests
+```bash
+# Run all tests with verbose output
+python -m pytest tests/ -v
+
+# Run tests with coverage report
+python -m pytest tests/ -v --cov=. --cov-report=html
+
+# Run specific test file
+python -m pytest tests/test_metrics_calculator.py -v
+python -m pytest tests/test_git_analyzer.py -v
+
+# Run specific test method
+python -m pytest tests/test_metrics_calculator.py::TestMetricsCalculator::test_get_code_churn_normal_case -v
+```
+
+#### Backend Test Coverage
+- **`tests/test_metrics_calculator.py`**: 15 tests covering all metric calculations
+  - Commit velocity (regular, lifetime, year-to-date)
+  - Code churn ratio calculations
+  - Test coverage analysis
+  - Contributor statistics
+  - Team comparisons
+- **`tests/test_git_analyzer.py`**: 20 tests covering repository operations
+  - Repository cloning and pulling
+  - Commit analysis and classification
+  - Progress tracking
+  - File type detection
+
+### Frontend Tests (React/Jest)
+
+#### Run Frontend Tests
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies (if not already done)
+npm install
+
+# Run all tests (Jest automatically finds tests in __tests__ folder)
+npm test
+
+# Run tests with coverage
+npm test -- --coverage --watchAll=false
+
+# Run tests in watch mode (default)
+npm test
+
+# Run specific test file
+npm test __tests__/Logo.test.js
+npm test __tests__/App.test.js
+npm test __tests__/Dashboard.test.js
+npm test __tests__/RepositoryManager.test.js
+```
+
+#### Frontend Test Coverage
+- **`__tests__/Logo.test.js`**: 5 tests for logo component rendering
+- **`__tests__/App.test.js`**: 8 tests covering navigation, repository selection, and API integration
+- **`__tests__/Dashboard.test.js`**: 15 tests covering metrics display, charts, and user interactions
+- **`__tests__/RepositoryManager.test.js`**: 15 tests covering repository management operations
+
+#### Test Configuration
+- **Jest**: Pre-configured with Create React App, automatically discovers tests in `__tests__/` folders
+- **React Testing Library**: Component testing utilities
+- **Mock Services**: Fetch API, Chart.js, and Socket.io mocking
+- **Coverage Reports**: Available in HTML format
+
+### Continuous Integration
+
+#### Running Full Test Suite
+```bash
+# Backend tests
+cd backend
+python -m pytest tests/ -v --cov=. --cov-report=term-missing
+
+# Frontend tests
+cd frontend
+npm test -- --coverage --watchAll=false --passWithNoTests
+```
+
+#### Test Scripts
+```bash
+# Add to package.json scripts for convenience
+"test:coverage": "npm test -- --coverage --watchAll=false"
+"test:backend": "cd ../backend && python -m pytest tests/ -v"
+```
+
+## Dependencies
 - Python 3.9+
 - Flask 2.3.3
 - GitPython 3.1.37
@@ -147,3 +266,7 @@ conda env remove -n commit-tracker
 - React 18.2.0
 - Chart.js 4.4.0
 - Material-UI 5.14.0
+
+### Test Dependencies
+- **Backend**: pytest, pytest-cov, pytest-mock, coverage
+- **Frontend**: @testing-library/react, @testing-library/jest-dom, @testing-library/user-event

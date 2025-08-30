@@ -1,0 +1,16 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="16" cy="16" r="14" fill="#1976d2" stroke="#ffffff" stroke-width="1.5"/>
+  
+  <!-- Code brackets -->
+  <path d="M9 11L6 16L9 21" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23 11L26 16L23 21" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Wave/tide element -->
+  <path d="M8 16C10 14 12 18 14 16C16 14 18 18 20 16C22 14 24 18 24 16" 
+        stroke="#64b5f6" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  
+  <!-- Smaller wave -->
+  <path d="M10 19C12 17 14 21 16 19C18 17 20 21 22 19" 
+        stroke="#90caf9" stroke-width="1" stroke-linecap="round" fill="none"/>
+</svg>
