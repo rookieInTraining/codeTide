@@ -202,7 +202,9 @@ const Dashboard = ({ repository }) => {
               <MenuItem value={7}>Last 7 days</MenuItem>
               <MenuItem value={30}>Last 30 days</MenuItem>
               <MenuItem value={90}>Last 90 days</MenuItem>
-              <MenuItem value={365}>Last year</MenuItem>
+              <MenuItem value={365}>Year to date</MenuItem>
+              <MenuItem value={730}>Last year</MenuItem>
+              <MenuItem value={0}>Lifetime</MenuItem>
             </Select>
           </FormControl>
         </Grid>
