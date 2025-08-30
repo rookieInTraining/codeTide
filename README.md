@@ -1,4 +1,4 @@
-# Commit Tracker - Developer & Tester Analytics
+# CodeTide - Developer & Tester Analytics
 
 A comprehensive application for measuring and analyzing commits made by developers and testers in software projects.
 

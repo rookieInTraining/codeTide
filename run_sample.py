@@ -1,5 +1,5 @@
 """
-Quick setup script to run the commit tracker with sample data
+Quick setup script to run the CodeTide with sample data
 """
 import os
 import sys
@@ -8,7 +8,7 @@ import subprocess
 def setup_and_run():
     """Setup sample data and provide instructions to run the application"""
     
-    print("🚀 Commit Tracker - Quick Setup")
+    print("🚀 CodeTide - Quick Setup")
     print("=" * 50)
     
     # Change to backend directory and create sample data

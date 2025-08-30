@@ -1,5 +1,5 @@
 @echo off
-echo Starting Commit Tracker Demo...
+echo Starting CodeTide Demo...
 echo.
 
 cd backend

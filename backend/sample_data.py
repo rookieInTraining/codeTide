@@ -1,5 +1,5 @@
 """
-Sample data generator for testing the commit tracker application
+Sample data generator for testing the CodeTide application
 """
 import os
 import sys

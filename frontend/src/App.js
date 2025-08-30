@@ -83,7 +83,7 @@ function App() {
         <AppBar position="static">
           <Toolbar>
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              Commit Tracker - Developer & Tester Analytics
+              CodeTide - Developer & Tester Analytics
             </Typography>
             <Button 
               color="inherit" 

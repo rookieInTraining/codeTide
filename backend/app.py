@@ -339,7 +339,7 @@ def handle_disconnect():
     print('Client disconnected')
 
 if __name__ == '__main__':
-    print("Starting Commit Tracker API...")
+    print("Starting CodeTide API...")
     print("API will be available at http://localhost:5000")
     print("\nAvailable endpoints:")
     print("- GET  /api/health")
