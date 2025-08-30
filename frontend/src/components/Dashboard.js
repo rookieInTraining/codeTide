@@ -190,7 +190,7 @@ const Dashboard = ({ repository }) => {
         </Alert>
       )}
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth>
             <InputLabel>Time Period</InputLabel>
@@ -214,57 +214,126 @@ const Dashboard = ({ repository }) => {
             onClick={analyzeRepository}
             disabled={analysisProgress.open}
             fullWidth
+            sx={{ 
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              py: { xs: 1.5, sm: 1 }
+            }}
           >
-            {analysisProgress.open ? <CircularProgress size={24} /> : 'Analyze Repository'}
+            {analysisProgress.open ? (
+              <CircularProgress size={24} />
+            ) : (
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Analyze Repository
+              </Box>
+            )}
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              {analysisProgress.open ? <CircularProgress size={20} /> : 'Analyze'}
+            </Box>
           </Button>
         </Grid>
       </Grid>
 
       {/* Key Metrics */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={3}>
+      <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 4 }}>
+        <Grid item xs={6} sm={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="primary">
+            <CardContent sx={{ 
+              textAlign: 'center',
+              py: { xs: 2, sm: 3 }
+            }}>
+              <Typography 
+                variant="h4" 
+                color="primary"
+                sx={{ 
+                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 400 }
+                }}
+              >
                 {metrics.velocity?.velocity?.toFixed(2) || '0'}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
                 Commits/Day
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid item xs={6} sm={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="primary">
+            <CardContent sx={{ 
+              textAlign: 'center',
+              py: { xs: 2, sm: 3 }
+            }}>
+              <Typography 
+                variant="h4" 
+                color="primary"
+                sx={{ 
+                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 400 }
+                }}
+              >
                 {metrics.churn?.churn_ratio?.toFixed(1) || '0'}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
                 Code Churn Ratio
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid item xs={6} sm={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="primary">
+            <CardContent sx={{ 
+              textAlign: 'center',
+              py: { xs: 2, sm: 3 }
+            }}>
+              <Typography 
+                variant="h4" 
+                color="primary"
+                sx={{ 
+                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 400 }
+                }}
+              >
                 {(metrics.testCoverage?.test_ratio * 100)?.toFixed(1) || '0'}%
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
                 Test File Ratio
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={3}>
+        <Grid item xs={6} sm={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" color="primary">
+            <CardContent sx={{ 
+              textAlign: 'center',
+              py: { xs: 2, sm: 3 }
+            }}>
+              <Typography 
+                variant="h4" 
+                color="primary"
+                sx={{ 
+                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 400 }
+                }}
+              >
                 {contributors.length}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
                 Active Contributors
               </Typography>
             </CardContent>
@@ -273,11 +342,15 @@ const Dashboard = ({ repository }) => {
       </Grid>
 
       {/* Charts */}
-      <Grid container spacing={3}>
+      <Grid container spacing={{ xs: 2, sm: 3 }}>
         <Grid item xs={12} lg={8}>
           <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Typography 
+                variant="h6" 
+                gutterBottom
+                sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              >
                 Daily Activity
               </Typography>
               {dailyActivity.length > 0 ? (
@@ -303,7 +376,15 @@ const Dashboard = ({ repository }) => {
                   }}
                 />
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ 
+                    textAlign: 'center', 
+                    py: { xs: 2, sm: 4 },
+                    fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                  }}
+                >
                   No activity data available
                 </Typography>
               )}
@@ -312,14 +393,26 @@ const Dashboard = ({ repository }) => {
         </Grid>
         <Grid item xs={12} lg={4}>
           <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Typography 
+                variant="h6" 
+                gutterBottom
+                sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              >
                 Commit Types
               </Typography>
               {Object.keys(commitTypes).length > 0 ? (
                 <Doughnut data={commitTypesChartData} />
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ 
+                    textAlign: 'center', 
+                    py: { xs: 2, sm: 4 },
+                    fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                  }}
+                >
                   No commit type data available
                 </Typography>
               )}
@@ -328,8 +421,12 @@ const Dashboard = ({ repository }) => {
         </Grid>
         <Grid item xs={12}>
           <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Typography 
+                variant="h6" 
+                gutterBottom
+                sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+              >
                 Top Contributors
               </Typography>
               {contributors.length > 0 ? (
@@ -345,7 +442,15 @@ const Dashboard = ({ repository }) => {
                   }}
                 />
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ 
+                    textAlign: 'center', 
+                    py: { xs: 2, sm: 4 },
+                    fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                  }}
+                >
                   No contributor data available
                 </Typography>
               )}

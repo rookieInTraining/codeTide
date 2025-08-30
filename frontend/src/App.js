@@ -82,30 +82,61 @@ function App() {
       <div className="App">
         <AppBar position="static">
           <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              CodeTide - Developer & Tester Analytics
+            <Typography 
+              variant="h6" 
+              component="div" 
+              sx={{ 
+                flexGrow: 1,
+                fontSize: { xs: '1rem', sm: '1.25rem' },
+                fontWeight: { xs: 600, sm: 400 }
+              }}
+            >
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                CodeTide - Developer & Tester Analytics
+              </Box>
+              <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                CodeTide
+              </Box>
             </Typography>
             <Button 
               color="inherit" 
               component={Link}
               to="/"
-              sx={{ mr: 2 }}
+              sx={{ 
+                mr: { xs: 1, sm: 2 },
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                px: { xs: 1, sm: 2 }
+              }}
               variant={location.pathname === '/' ? 'outlined' : 'text'}
             >
-              Dashboard
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Dashboard
+              </Box>
+              <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                Dash
+              </Box>
             </Button>
             <Button 
               color="inherit" 
               component={Link}
               to="/repositories"
+              sx={{ 
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                px: { xs: 1, sm: 2 }
+              }}
               variant={location.pathname === '/repositories' ? 'outlined' : 'text'}
             >
-              Repositories
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Repositories
+              </Box>
+              <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                Repos
+              </Box>
             </Button>
           </Toolbar>
         </AppBar>
 
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+        <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 4 }, mb: { xs: 2, sm: 4 }, px: { xs: 2, sm: 3 } }}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
@@ -116,9 +147,9 @@ function App() {
             <Route path="/" element={
               <>
                 {repositories.length > 0 && (
-                  <Card sx={{ mb: 3 }}>
-                    <CardContent>
-                      <Grid container spacing={2} alignItems="center">
+                  <Card sx={{ mb: { xs: 2, sm: 3 } }}>
+                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                      <Grid container spacing={{ xs: 2, sm: 2 }} alignItems="center">
                         <Grid item xs={12} sm={6}>
                           <FormControl fullWidth>
                             <InputLabel>Select Repository</InputLabel>
@@ -139,7 +170,14 @@ function App() {
                           </FormControl>
                         </Grid>
                         <Grid item xs={12} sm={6}>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography 
+                            variant="body2" 
+                            color="text.secondary"
+                            sx={{ 
+                              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                              textAlign: { xs: 'center', sm: 'left' }
+                            }}
+                          >
                             {selectedRepo?.last_analyzed 
                               ? `Last analyzed: ${new Date(selectedRepo.last_analyzed).toLocaleString()}`
                               : 'Not analyzed yet'
@@ -155,17 +193,41 @@ function App() {
                   <Dashboard repository={selectedRepo} />
                 ) : (
                   <Card>
-                    <CardContent sx={{ textAlign: 'center', py: 8 }}>
-                      <Typography variant="h5" gutterBottom>
+                    <CardContent sx={{ 
+                      textAlign: 'center', 
+                      py: { xs: 4, sm: 8 },
+                      px: { xs: 2, sm: 3 }
+                    }}>
+                      <Typography 
+                        variant="h5" 
+                        gutterBottom
+                        sx={{ 
+                          fontSize: { xs: '1.25rem', sm: '1.5rem' },
+                          fontWeight: { xs: 600, sm: 400 }
+                        }}
+                      >
                         No Repositories Available
                       </Typography>
-                      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+                      <Typography 
+                        variant="body1" 
+                        color="text.secondary" 
+                        sx={{ 
+                          mb: 3,
+                          fontSize: { xs: '0.875rem', sm: '1rem' },
+                          px: { xs: 1, sm: 0 }
+                        }}
+                      >
                         Add a repository to start tracking commits and analyzing developer metrics.
                       </Typography>
                       <Button 
                         variant="contained" 
                         component={Link}
                         to="/repositories"
+                        sx={{
+                          fontSize: { xs: '0.875rem', sm: '1rem' },
+                          px: { xs: 3, sm: 4 },
+                          py: { xs: 1, sm: 1.5 }
+                        }}
                       >
                         Add Repository
                       </Button>
