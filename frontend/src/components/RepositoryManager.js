@@ -31,6 +31,7 @@ import { Add as AddIcon, Refresh as RefreshIcon, Delete as DeleteIcon, GetApp as
 import CloneProgressDialog from './CloneProgressDialog';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
 import PullProgressDialog from './PullProgressDialog';
+import AnalysisProgressDialog from './AnalysisProgressDialog';
 
 const RepositoryManager = ({ repositories, onRepoAdded }) => {
   const [open, setOpen] = useState(false);
@@ -53,6 +54,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
   const [pullRepositoryName, setPullRepositoryName] = useState('');
   const [cloneProgress, setCloneProgress] = useState({ open: false, repositoryName: '' });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, repository: null });
+  const [analysisProgress, setAnalysisProgress] = useState({ open: false, repositoryName: '', repositoryId: null });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -123,23 +125,12 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
     }
   };
 
-  const handleAnalyze = async (repoId) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`http://localhost:5000/api/repositories/${repoId}/analyze`, {
-        method: 'POST'
-      });
-      
-      if (!response.ok) throw new Error('Analysis failed');
-      
-      const result = await response.json();
-      setSuccess(`Analysis complete! Processed ${result.commits_processed} commits.`);
-      onRepoAdded(); // Refresh the repository list
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+  const handleAnalyze = async (repo) => {
+    setAnalysisProgress({ 
+      open: true, 
+      repositoryName: repo.name, 
+      repositoryId: repo.id 
+    });
   };
 
   const handleCloneComplete = (success) => {
@@ -216,6 +207,15 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
       } else {
         setSuccess('Repository is already up to date.');
       }
+      onRepoAdded(); // Refresh the repository list
+    }
+  };
+
+  const handleAnalysisComplete = (success, commitsProcessed) => {
+    setAnalysisProgress({ open: false, repositoryName: '', repositoryId: null });
+    
+    if (success) {
+      setSuccess(`Analysis complete! Processed ${commitsProcessed.toLocaleString()} commits.`);
       onRepoAdded(); // Refresh the repository list
     }
   };
@@ -316,7 +316,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                             size="small"
                             variant="outlined"
                             startIcon={<RefreshIcon />}
-                            onClick={() => handleAnalyze(repo.id)}
+                            onClick={() => handleAnalyze(repo)}
                             disabled={loading}
                           >
                             Analyze
@@ -471,6 +471,15 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
         repositoryName={pullRepositoryName}
         onClose={() => setPullProgressOpen(false)}
         onComplete={handlePullComplete}
+      />
+
+      {/* Analysis Progress Dialog */}
+      <AnalysisProgressDialog
+        open={analysisProgress.open}
+        repositoryName={analysisProgress.repositoryName}
+        repositoryId={analysisProgress.repositoryId}
+        onClose={() => setAnalysisProgress({ open: false, repositoryName: '', repositoryId: null })}
+        onComplete={handleAnalysisComplete}
       />
 
       {/* Delete Confirmation Dialog */}

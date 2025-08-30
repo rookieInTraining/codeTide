@@ -13,6 +13,7 @@ import {
   Select,
   MenuItem
 } from '@mui/material';
+import AnalysisProgressDialog from './AnalysisProgressDialog';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -48,6 +49,7 @@ const Dashboard = ({ repository }) => {
   const [error, setError] = useState(null);
   const [timePeriod, setTimePeriod] = useState(30);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState({ open: false, repositoryName: '', repositoryId: null });
 
   useEffect(() => {
     if (repository) {
@@ -106,21 +108,18 @@ const Dashboard = ({ repository }) => {
   };
 
   const analyzeRepository = async () => {
-    setAnalyzing(true);
-    try {
-      const response = await fetch(`http://localhost:5000/api/repositories/${repository.id}/analyze`, {
-        method: 'POST'
-      });
-      
-      if (!response.ok) throw new Error('Analysis failed');
-      
-      const result = await response.json();
-      alert(`Analysis complete! Processed ${result.commits_processed} commits.`);
-      fetchAllData();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setAnalyzing(false);
+    setAnalysisProgress({ 
+      open: true, 
+      repositoryName: repository.name, 
+      repositoryId: repository.id 
+    });
+  };
+
+  const handleAnalysisComplete = (success, commitsProcessed) => {
+    setAnalysisProgress({ open: false, repositoryName: '', repositoryId: null });
+    
+    if (success) {
+      fetchAllData(); // Refresh all data after successful analysis
     }
   };
 
@@ -211,10 +210,10 @@ const Dashboard = ({ repository }) => {
           <Button
             variant="contained"
             onClick={analyzeRepository}
-            disabled={analyzing}
+            disabled={analysisProgress.open}
             fullWidth
           >
-            {analyzing ? <CircularProgress size={24} /> : 'Analyze Repository'}
+            {analysisProgress.open ? <CircularProgress size={24} /> : 'Analyze Repository'}
           </Button>
         </Grid>
       </Grid>
@@ -352,6 +351,15 @@ const Dashboard = ({ repository }) => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Analysis Progress Dialog */}
+      <AnalysisProgressDialog
+        open={analysisProgress.open}
+        repositoryName={analysisProgress.repositoryName}
+        repositoryId={analysisProgress.repositoryId}
+        onClose={() => setAnalysisProgress({ open: false, repositoryName: '', repositoryId: null })}
+        onComplete={handleAnalysisComplete}
+      />
     </div>
   );
 };

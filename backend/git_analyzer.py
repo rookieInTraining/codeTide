@@ -369,11 +369,21 @@ class GitAnalyzer:
         except Exception as e:
             return False, f"URL validation failed: {str(e)}"
     
-    def analyze_repository(self, repo_path, repository_id, max_commits=1000):
+    def analyze_repository(self, repo_path, repository_id, max_commits=None):
         """Analyze git repository and extract commit data"""
         try:
             repo = git.Repo(repo_path)
             commits_processed = 0
+            
+            # Emit analysis started event
+            if self.socketio:
+                self.socketio.emit('analysis_started', {
+                    'repository_id': repository_id,
+                    'path': repo_path
+                })
+            
+            # Get total commit count for progress calculation
+            total_commits = sum(1 for _ in repo.iter_commits('--all', max_count=max_commits))
             
             # Get commits from all branches
             for commit in repo.iter_commits('--all', max_count=max_commits):
@@ -426,15 +436,47 @@ class GitAnalyzer:
                     self.session.add(commit_file)
                 
                 commits_processed += 1
+                
+                # Emit progress updates every 100 commits
                 if commits_processed % 100 == 0:
                     print(f"Processed {commits_processed} commits...")
                     self.session.commit()
+                    
+                    if self.socketio and total_commits > 0:
+                        progress = min(95, int((commits_processed / total_commits) * 90) + 5)
+                        self.socketio.emit('analysis_progress', {
+                            'repository_id': repository_id,
+                            'stage': f'Processing commits ({commits_processed}/{total_commits})',
+                            'progress': progress,
+                            'commits_processed': commits_processed,
+                            'total_commits': total_commits
+                        })
             
             self.session.commit()
+            
+            # Emit completion event
+            if self.socketio:
+                self.socketio.emit('analysis_completed', {
+                    'repository_id': repository_id,
+                    'success': True,
+                    'commits_processed': commits_processed,
+                    'message': f'Analysis complete. Processed {commits_processed} commits.'
+                })
+            
             print(f"Analysis complete. Processed {commits_processed} commits.")
             return commits_processed
             
         except Exception as e:
-            print(f"Error analyzing repository: {str(e)}")
+            error_msg = f"Error analyzing repository: {str(e)}"
+            print(error_msg)
+            
+            # Emit error event
+            if self.socketio:
+                self.socketio.emit('analysis_completed', {
+                    'repository_id': repository_id,
+                    'success': False,
+                    'error': error_msg
+                })
+            
             self.session.rollback()
             return 0
