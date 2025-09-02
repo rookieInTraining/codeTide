@@ -75,7 +75,7 @@ class MetricSnapshot(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # Database setup
-def create_database(db_path='sample_commit_tracker.db'):
+def create_database(db_path='./db/commit_tracker.db'):
     engine = create_engine(f'sqlite:///{db_path}')
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)

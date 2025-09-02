@@ -1,6 +1,5 @@
 # Remove repositories folder from git
-backend/repositories/
-frontend/repositories/
+**/repositories/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

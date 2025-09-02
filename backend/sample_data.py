@@ -5,11 +5,11 @@ import os
 import sys
 from datetime import datetime, timedelta
 import random
-from backend.models import create_database, Repository, Contributor, Commit, CommitFile
+from models import create_database, Repository, Contributor, Commit, CommitFile
 
 def create_sample_data():
     """Create sample data for testing"""
-    engine, Session = create_database('sample_commit_tracker.db')
+    engine, Session = create_database('./db/sample_commit_tracker.db')
     session = Session()
     
     # Create sample repository
