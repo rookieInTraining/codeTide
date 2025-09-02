@@ -35,7 +35,8 @@ import {
   TableHead,
   TableRow,
   TableCell,
-  TableBody
+  TableBody,
+  Tooltip as MuiTooltip
 } from '@mui/material';
 import { formStyles } from '../theme/formStyles';
 import {
@@ -48,8 +49,10 @@ import {
   Schedule as ScheduleIcon,
   Search as SearchIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
-  KeyboardArrowUp as KeyboardArrowUpIcon
+  KeyboardArrowUp as KeyboardArrowUpIcon,
+  HelpOutline as HelpIcon
 } from '@mui/icons-material';
+import { getTooltipContent } from '../utils/metricTooltips';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -166,14 +169,36 @@ const getActivityAxisLabel = (granularity) => {
 
 const CONTRIBUTORS_PER_PAGE = 20;
 
-function MetricCard({ title, value, subtitle, isExpanded, onToggle, children }) {
+function MetricCard({ title, value, subtitle, isExpanded, onToggle, children, tooltipKey }) {
   return (
     <Card sx={{ height: '100%' }}>
       <CardContent sx={{ p: 2 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-          <Typography variant="h6" component="h3" sx={{ fontSize: '1rem', fontWeight: 600 }}>
-            {title}
-          </Typography>
+          <Box display="flex" alignItems="center" gap={0.5}>
+            <Typography variant="h6" component="h3" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+              {title}
+            </Typography>
+            {tooltipKey && (
+              <MuiTooltip 
+                title={
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      {getTooltipContent(tooltipKey).title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      {getTooltipContent(tooltipKey).description}
+                    </Typography>
+                  </Box>
+                }
+                arrow
+                placement="top"
+              >
+                <IconButton size="small" sx={{ p: 0.25 }}>
+                  <HelpIcon fontSize="small" sx={{ fontSize: '0.875rem' }} />
+                </IconButton>
+              </MuiTooltip>
+            )}
+          </Box>
           {children && (
             <IconButton 
               size="small" 
@@ -654,9 +679,10 @@ function CommitterAnalysis() {
                 >
                   <MenuItem value={7}>Last 7 days</MenuItem>
                   <MenuItem value={30}>Last 30 days</MenuItem>
-                  <MenuItem value={90}>Last 3 months</MenuItem>
+                  <MenuItem value={90}>Last 90 days</MenuItem>
                   <MenuItem value={365}>Year to date</MenuItem>
-                  <MenuItem value={0}>All time</MenuItem>
+                  <MenuItem value={730}>Last year</MenuItem>
+                  <MenuItem value={0}>Lifetime</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -825,6 +851,7 @@ function CommitterAnalysis() {
                           subtitle={`${metrics.commit_velocity || 0} per day`}
                           icon={<CodeIcon />}
                           color="primary"
+                          tooltipKey="total_commits"
                         />
                       </Grid>
                       <Grid item xs={6} sm={6} md={3}>
@@ -834,6 +861,7 @@ function CommitterAnalysis() {
                           subtitle={`${metrics.code_churn_ratio || 0}x churn ratio`}
                           icon={<TrendingUpIcon />}
                           color="success"
+                          tooltipKey="lines_added"
                         />
                       </Grid>
                       <Grid item xs={6} sm={6} md={3}>
@@ -843,6 +871,7 @@ function CommitterAnalysis() {
                           subtitle={`${metrics.avg_files_per_commit || 0} avg per commit`}
                           icon={<PersonIcon />}
                           color="warning"
+                          tooltipKey="files_modified"
                         />
                       </Grid>
                       <Grid item xs={6} sm={6} md={3}>
@@ -852,6 +881,7 @@ function CommitterAnalysis() {
                           subtitle="Code cleanup"
                           icon={<ScheduleIcon />}
                           color="error"
+                          tooltipKey="lines_deleted"
                         />
                       </Grid>
                     </Grid>

@@ -13,10 +13,14 @@ import {
   Select,
   MenuItem,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Tooltip,
+  IconButton
 } from '@mui/material';
+import { HelpOutline as HelpIcon } from '@mui/icons-material';
 import AnalysisProgressDialog from './AnalysisProgressDialog';
 import { formStyles } from '../theme/formStyles';
+import { getTooltipContent } from '../utils/metricTooltips';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -25,7 +29,7 @@ import {
   LineElement,
   BarElement,
   Title,
-  Tooltip,
+  Tooltip as ChartTooltip,
   Legend,
   ArcElement,
 } from 'chart.js';
@@ -38,7 +42,7 @@ ChartJS.register(
   LineElement,
   BarElement,
   Title,
-  Tooltip,
+  ChartTooltip,
   Legend,
   ArcElement
 );
@@ -388,13 +392,33 @@ const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => 
               >
                 {metrics.velocity?.velocity?.toFixed(2) || '0'}
               </Typography>
-              <Typography 
-                variant="body2" 
-                color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
-              >
-                Commits/Day
-              </Typography>
+              <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
+                >
+                  Commits/Day
+                </Typography>
+                <Tooltip 
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        {getTooltipContent('commits_per_day').title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {getTooltipContent('commits_per_day').description}
+                      </Typography>
+                    </Box>
+                  }
+                  arrow
+                  placement="top"
+                >
+                  <IconButton size="small" sx={{ p: 0.25 }}>
+                    <HelpIcon fontSize="small" sx={{ fontSize: '0.875rem' }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -414,13 +438,33 @@ const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => 
               >
                 {metrics.churn?.churn_ratio?.toFixed(1) || '0'}
               </Typography>
-              <Typography 
-                variant="body2" 
-                color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
-              >
-                Code Churn Ratio
-              </Typography>
+              <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
+                >
+                  Code Churn Ratio
+                </Typography>
+                <Tooltip 
+                    title={
+                      <Box>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          {getTooltipContent('code_churn_ratio').title}
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 0.5 }}>
+                          {getTooltipContent('code_churn_ratio').description}
+                        </Typography>
+                      </Box>
+                    }
+                    arrow
+                    placement="top"
+                  >
+                    <IconButton size="small" sx={{ p: 0.25 }}>
+                      <HelpIcon fontSize="small" sx={{ fontSize: '0.875rem' }} />
+                    </IconButton>
+                  </Tooltip>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -444,13 +488,33 @@ const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => 
                   {(metrics.testCoverage?.test_ratio * 100)?.toFixed(1) || '0'}%
                 </Typography>
               )}
-              <Typography 
-                variant="body2" 
-                color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
-              >
-                Test File Ratio
-              </Typography>
+              <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
+                >
+                  Test File Ratio
+                </Typography>
+                <Tooltip 
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        {getTooltipContent('test_file_ratio').title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {getTooltipContent('test_file_ratio').description}
+                      </Typography>
+                    </Box>
+                  }
+                  arrow
+                  placement="top"
+                >
+                  <IconButton size="small" sx={{ p: 0.25 }}>
+                    <HelpIcon fontSize="small" sx={{ fontSize: '0.875rem' }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -474,13 +538,33 @@ const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => 
                   {contributors.length}
                 </Typography>
               )}
-              <Typography 
-                variant="body2" 
-                color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
-              >
-                Active Contributors
-              </Typography>
+              <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
+                >
+                  Active Contributors
+                </Typography>
+                <Tooltip 
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        {getTooltipContent('active_contributors').title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {getTooltipContent('active_contributors').description}
+                      </Typography>
+                    </Box>
+                  }
+                  arrow
+                  placement="top"
+                >
+                  <IconButton size="small" sx={{ p: 0.25 }}>
+                    <HelpIcon fontSize="small" sx={{ fontSize: '0.875rem' }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -491,13 +575,32 @@ const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => 
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
-              <Typography 
-                variant="h6" 
-                gutterBottom
-                sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
-              >
-                Daily Activity
-              </Typography>
+              <Box display="flex" alignItems="center" gap={1} mb={2}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
+                >
+                  Daily Activity
+                </Typography>
+                <Tooltip 
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        {getTooltipContent('daily_activity').title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {getTooltipContent('daily_activity').description}
+                      </Typography>
+                    </Box>
+                  }
+                  arrow
+                  placement="top"
+                >
+                  <IconButton size="small" sx={{ p: 0.25 }}>
+                    <HelpIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               {loadingStates.dailyActivity ? (
                 <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
                   <CircularProgress />
@@ -543,13 +646,32 @@ const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => 
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
-              <Typography 
-                variant="h6" 
-                gutterBottom
-                sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
-              >
-                Commit Types
-              </Typography>
+              <Box display="flex" alignItems="center" gap={1} mb={2}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
+                >
+                  Commit Types
+                </Typography>
+                <Tooltip 
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        {getTooltipContent('commit_types').title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {getTooltipContent('commit_types').description}
+                      </Typography>
+                    </Box>
+                  }
+                  arrow
+                  placement="top"
+                >
+                  <IconButton size="small" sx={{ p: 0.25 }}>
+                    <HelpIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               {loadingStates.commitTypes ? (
                 <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
                   <CircularProgress />
@@ -575,13 +697,32 @@ const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => 
         <Grid item xs={12}>
           <Card>
             <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
-              <Typography 
-                variant="h6" 
-                gutterBottom
-                sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
-              >
-                Top Contributors
-              </Typography>
+              <Box display="flex" alignItems="center" gap={1} mb={2}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
+                >
+                  Top Contributors
+                </Typography>
+                <Tooltip 
+                  title={
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        {getTooltipContent('top_contributors').title}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {getTooltipContent('top_contributors').description}
+                      </Typography>
+                    </Box>
+                  }
+                  arrow
+                  placement="top"
+                >
+                  <IconButton size="small" sx={{ p: 0.25 }}>
+                    <HelpIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               {loadingStates.contributors ? (
                 <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
                   <CircularProgress />

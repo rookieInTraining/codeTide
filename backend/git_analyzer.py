@@ -427,16 +427,39 @@ class GitAnalyzer:
             else:
                 total_commits = sum(1 for _ in repo.iter_commits('--all', max_count=max_commits))
             
-            # Pre-fetch existing commit SHAs for efficient duplicate checking
+            # Pre-fetch existing commit SHAs and check for missing branch names
             existing_shas = set()
-            existing_commits = self.session.query(Commit.sha).filter_by(repository_id=repository_id).all()
-            existing_shas = {sha[0] for sha in existing_commits}
+            commits_needing_update = set()
+            existing_commits = self.session.query(Commit.sha, Commit.branch_name).filter_by(repository_id=repository_id).all()
+            for sha, branch_name in existing_commits:
+                existing_shas.add(sha)
+                # Mark commits with NULL branch names for update
+                if branch_name is None:
+                    commits_needing_update.add(sha)
             
             # Cache contributors to avoid repeated database queries
             contributor_cache = {}
             existing_contributors = self.session.query(Contributor).all()
             for contrib in existing_contributors:
                 contributor_cache[contrib.email] = contrib
+            
+            # Get default branch name for performance
+            default_branch_name = 'main'
+            try:
+                # Try to get the active/current branch
+                if hasattr(repo, 'active_branch'):
+                    default_branch_name = repo.active_branch.name
+                else:
+                    # Fallback: check for common main branch names
+                    for branch_name in ['main', 'master', 'develop']:
+                        try:
+                            if branch_name in [b.name for b in repo.branches]:
+                                default_branch_name = branch_name
+                                break
+                        except Exception:
+                            continue
+            except Exception:
+                pass
             
             # Dynamic batch sizing based on repository size
             if total_commits > 30000:
@@ -450,8 +473,38 @@ class GitAnalyzer:
             
             # Get commits from all branches
             for commit in repo.iter_commits('--all', max_count=max_commits):
-                # Skip if commit already exists (optimized check)
-                if commit.hexsha in existing_shas:
+                # Skip if commit already exists and doesn't need updates
+                if commit.hexsha in existing_shas and commit.hexsha not in commits_needing_update:
+                    continue
+                
+                # Use default branch name for performance (simple approach)
+                branch_name = default_branch_name
+                
+                # Check if this is an update or new commit
+                is_update = commit.hexsha in commits_needing_update
+                
+                if is_update:
+                    # Update existing commit with branch name
+                    existing_commit = self.session.query(Commit).filter_by(
+                        sha=commit.hexsha, 
+                        repository_id=repository_id
+                    ).first()
+                    if existing_commit:
+                        existing_commit.branch_name = branch_name
+                        commits_processed += 1
+                        
+                        # Emit progress updates for updates too
+                        if commits_processed % 100 == 0:
+                            print(f"Updated {commits_processed} commits...")
+                            if self.socketio and total_commits > 0:
+                                progress = min(95, int((commits_processed / total_commits) * 90) + 5)
+                                self.socketio.emit('analysis_progress', {
+                                    'repository_id': repository_id,
+                                    'stage': f'Updating commits ({commits_processed}/{total_commits})',
+                                    'progress': progress,
+                                    'commits_processed': commits_processed,
+                                    'total_commits': total_commits
+                                })
                     continue
                 
                 # Get or create contributor (use cache)
@@ -511,6 +564,7 @@ class GitAnalyzer:
                     lines_added=lines_added,
                     lines_deleted=lines_deleted,
                     commit_type=self.classify_commit_type(commit.message),
+                    branch_name=branch_name,
                     is_merge=len(commit.parents) > 1
                 )
                 
@@ -589,9 +643,9 @@ class GitAnalyzer:
             for commit_record, file_stats in commit_records:
                 # Limit files per commit for very large commits (performance)
                 file_items = list(file_stats.items())
-                if len(file_items) > 1000:  # Skip processing commits with >1000 files
-                    print(f"Skipping file processing for large commit {commit_record.sha[:8]} with {len(file_items)} files")
-                    continue
+                # if len(file_items) > 1000:  # Skip processing commits with >1000 files
+                #     print(f"Skipping file processing for large commit {commit_record.sha[:8]} with {len(file_items)} files")
+                #     continue
                     
                 for file_path, file_stat_dict in file_items:
                     file_objects.append(CommitFile(
