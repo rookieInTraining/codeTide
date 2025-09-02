@@ -24,6 +24,7 @@ import Dashboard from './components/Dashboard';
 import RepositoryManager from './components/RepositoryManager';
 import CommitterAnalysis from './components/CommitterAnalysis';
 import Logo from './components/Logo';
+import { formStyles } from './theme/formStyles';
 import './App.css';
 
 const theme = createTheme({
@@ -205,7 +206,7 @@ function App() {
                     <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
                       <Grid container spacing={{ xs: 2, sm: 2 }} alignItems="center">
                         <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth>
+                          <FormControl {...formStyles.formControl}>
                             <InputLabel>Select Repository</InputLabel>
                             <Select
                               value={selectedRepo?.id || ''}

@@ -16,6 +16,7 @@ import {
   useMediaQuery
 } from '@mui/material';
 import AnalysisProgressDialog from './AnalysisProgressDialog';
+import { formStyles } from '../theme/formStyles';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -71,6 +72,12 @@ const Dashboard = ({ repository }) => {
   const [commitTypes, setCommitTypes] = useState(() => getStoredState('commitTypes', {}));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [loadingStates, setLoadingStates] = useState({
+    metrics: false,
+    contributors: false,
+    dailyActivity: false,
+    commitTypes: false
+  });
   const [timePeriod, setTimePeriod] = useState(() => getStoredState('timePeriod', 30));
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState({ open: false, repositoryName: '', repositoryId: null });
@@ -95,13 +102,16 @@ const Dashboard = ({ repository }) => {
     setLoading(true);
     setError(null);
     
+    // Start all calls in parallel but track individual progress
+    const promises = [
+      fetchMetrics(),
+      fetchContributors(),
+      fetchDailyActivity(),
+      fetchCommitTypes()
+    ];
+    
     try {
-      await Promise.all([
-        fetchMetrics(),
-        fetchContributors(),
-        fetchDailyActivity(),
-        fetchCommitTypes()
-      ]);
+      await Promise.all(promises);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -110,40 +120,60 @@ const Dashboard = ({ repository }) => {
   };
 
   const fetchMetrics = async () => {
-    const [velocityRes, churnRes, testCoverageRes] = await Promise.all([
-      fetch(`http://localhost:5000/api/metrics/velocity?repository_id=${repository.id}&days=${timePeriod}`),
-      fetch(`http://localhost:5000/api/metrics/churn?repository_id=${repository.id}&days=${timePeriod}`),
-      fetch(`http://localhost:5000/api/metrics/test-coverage?repository_id=${repository.id}&days=${timePeriod}`)
-    ]);
+    setLoadingStates(prev => ({ ...prev, metrics: true }));
+    try {
+      const [velocityRes, churnRes, testCoverageRes] = await Promise.all([
+        fetch(`http://localhost:5000/api/metrics/velocity?repository_id=${repository.id}&days=${timePeriod}`),
+        fetch(`http://localhost:5000/api/metrics/churn?repository_id=${repository.id}&days=${timePeriod}`),
+        fetch(`http://localhost:5000/api/metrics/test-coverage?repository_id=${repository.id}&days=${timePeriod}`)
+      ]);
 
-    const velocity = await velocityRes.json();
-    const churn = await churnRes.json();
-    const testCoverage = await testCoverageRes.json();
+      const velocity = await velocityRes.json();
+      const churn = await churnRes.json();
+      const testCoverage = await testCoverageRes.json();
 
-    const metricsData = { velocity, churn, testCoverage };
-    setMetrics(metricsData);
-    setStoredState('metrics', metricsData);
+      const metricsData = { velocity, churn, testCoverage };
+      setMetrics(metricsData);
+      setStoredState('metrics', metricsData);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, metrics: false }));
+    }
   };
 
   const fetchContributors = async () => {
-    const response = await fetch(`http://localhost:5000/api/metrics/contributors?repository_id=${repository.id}&days=${timePeriod}`);
-    const data = await response.json();
-    setContributors(data);
-    setStoredState('contributors', data);
+    setLoadingStates(prev => ({ ...prev, contributors: true }));
+    try {
+      const response = await fetch(`http://localhost:5000/api/metrics/contributors?repository_id=${repository.id}&days=${timePeriod}`);
+      const data = await response.json();
+      setContributors(data);
+      setStoredState('contributors', data);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, contributors: false }));
+    }
   };
 
   const fetchDailyActivity = async () => {
-    const response = await fetch(`http://localhost:5000/api/charts/daily-activity?repository_id=${repository.id}&days=${timePeriod}`);
-    const data = await response.json();
-    setDailyActivity(data);
-    setStoredState('dailyActivity', data);
+    setLoadingStates(prev => ({ ...prev, dailyActivity: true }));
+    try {
+      const response = await fetch(`http://localhost:5000/api/charts/daily-activity?repository_id=${repository.id}&days=${timePeriod}`);
+      const data = await response.json();
+      setDailyActivity(data);
+      setStoredState('dailyActivity', data);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, dailyActivity: false }));
+    }
   };
 
   const fetchCommitTypes = async () => {
-    const response = await fetch(`http://localhost:5000/api/charts/commit-types?repository_id=${repository.id}&days=${timePeriod}`);
-    const data = await response.json();
-    setCommitTypes(data);
-    setStoredState('commitTypes', data);
+    setLoadingStates(prev => ({ ...prev, commitTypes: true }));
+    try {
+      const response = await fetch(`http://localhost:5000/api/charts/commit-types?repository_id=${repository.id}&days=${timePeriod}`);
+      const data = await response.json();
+      setCommitTypes(data);
+      setStoredState('commitTypes', data);
+    } finally {
+      setLoadingStates(prev => ({ ...prev, commitTypes: false }));
+    }
   };
 
   const analyzeRepository = async () => {
@@ -236,7 +266,7 @@ const Dashboard = ({ repository }) => {
 
       <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ mb: { xs: 2, sm: 2.5, md: 3 } }}>
         <Grid item xs={12} sm={6} md={4}>
-          <FormControl fullWidth>
+          <FormControl {...formStyles.formControl}>
             <InputLabel>Time Period</InputLabel>
             <Select
               value={timePeriod}
@@ -257,14 +287,9 @@ const Dashboard = ({ repository }) => {
         </Grid>
         <Grid item xs={12} sm={6} md={8}>
           <Button
-            variant="contained"
+            {...formStyles.button.primary}
             onClick={fetchAllData}
             disabled={loading || analysisProgress.open}
-            fullWidth
-            sx={{ 
-              fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
-              py: { xs: 1.5, sm: 1.25, md: 1 }
-            }}
           >
             {loading ? (
               <CircularProgress size={24} />
@@ -283,14 +308,9 @@ const Dashboard = ({ repository }) => {
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
           <Button
-            variant="outlined"
+            {...formStyles.button.secondary}
             onClick={analyzeRepository}
             disabled={analysisProgress.open}
-            fullWidth
-            sx={{ 
-              fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
-              py: { xs: 1.5, sm: 1.25, md: 1 }
-            }}
           >
             {analysisProgress.open ? (
               <CircularProgress size={24} />
@@ -369,16 +389,20 @@ const Dashboard = ({ repository }) => {
               textAlign: 'center',
               py: { xs: 2, sm: 2.5, md: 3 }
             }}>
-              <Typography 
-                variant="h4" 
-                color="primary"
-                sx={{ 
-                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
-                  fontWeight: { xs: 600, sm: 500, md: 400 }
-                }}
-              >
-                {(metrics.testCoverage?.test_ratio * 100)?.toFixed(1) || '0'}%
-              </Typography>
+              {loadingStates.metrics ? (
+                <CircularProgress size={32} />
+              ) : (
+                <Typography 
+                  variant="h4" 
+                  color="primary"
+                  sx={{ 
+                    fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                    fontWeight: { xs: 600, sm: 500, md: 400 }
+                  }}
+                >
+                  {(metrics.testCoverage?.test_ratio * 100)?.toFixed(1) || '0'}%
+                </Typography>
+              )}
               <Typography 
                 variant="body2" 
                 color="text.secondary"
@@ -395,16 +419,20 @@ const Dashboard = ({ repository }) => {
               textAlign: 'center',
               py: { xs: 2, sm: 2.5, md: 3 }
             }}>
-              <Typography 
-                variant="h4" 
-                color="primary"
-                sx={{ 
-                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
-                  fontWeight: { xs: 600, sm: 500, md: 400 }
-                }}
-              >
-                {contributors.length}
-              </Typography>
+              {loadingStates.contributors ? (
+                <CircularProgress size={32} />
+              ) : (
+                <Typography 
+                  variant="h4" 
+                  color="primary"
+                  sx={{ 
+                    fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                    fontWeight: { xs: 600, sm: 500, md: 400 }
+                  }}
+                >
+                  {contributors.length}
+                </Typography>
+              )}
               <Typography 
                 variant="body2" 
                 color="text.secondary"
@@ -429,7 +457,11 @@ const Dashboard = ({ repository }) => {
               >
                 Daily Activity
               </Typography>
-              {dailyActivity.length > 0 ? (
+              {loadingStates.dailyActivity ? (
+                <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                  <CircularProgress />
+                </Box>
+              ) : dailyActivity.length > 0 ? (
                 <Line 
                   data={dailyActivityChartData}
                   options={{
@@ -477,7 +509,11 @@ const Dashboard = ({ repository }) => {
               >
                 Commit Types
               </Typography>
-              {Object.keys(commitTypes).length > 0 ? (
+              {loadingStates.commitTypes ? (
+                <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                  <CircularProgress />
+                </Box>
+              ) : Object.keys(commitTypes).length > 0 ? (
                 <Doughnut data={commitTypesChartData} />
               ) : (
                 <Typography 
@@ -505,7 +541,11 @@ const Dashboard = ({ repository }) => {
               >
                 Top Contributors
               </Typography>
-              {contributors.length > 0 ? (
+              {loadingStates.contributors ? (
+                <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                  <CircularProgress />
+                </Box>
+              ) : contributors.length > 0 ? (
                 <Bar 
                   data={contributorChartData}
                   options={{

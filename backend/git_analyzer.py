@@ -398,7 +398,7 @@ class GitAnalyzer:
             return False, f"URL validation failed: {str(e)}"
     
     def analyze_repository(self, repo_path, repository_id, max_commits=None):
-        """Analyze git repository and extract commit data"""
+        """Analyze git repository and extract commit data with optimized batch processing"""
         try:
             repo = git.Repo(repo_path)
             commits_processed = 0
@@ -410,27 +410,78 @@ class GitAnalyzer:
                     'path': repo_path
                 })
             
-            # Get total commit count for progress calculation
-            total_commits = sum(1 for _ in repo.iter_commits('--all', max_count=max_commits))
+            # Optimize for large repositories (30k+ commits)
+            if max_commits is None or max_commits > 10000:
+                # For large repos, use faster commit counting and larger batches
+                try:
+                    # Fast commit count using git command
+                    import subprocess
+                    result = subprocess.run(['git', 'rev-list', '--count', '--all'], 
+                                          cwd=repo_path, capture_output=True, text=True, timeout=30)
+                    total_commits = int(result.stdout.strip()) if result.returncode == 0 else 0
+                    if max_commits:
+                        total_commits = min(total_commits, max_commits)
+                except:
+                    # Fallback to iterator count with limit
+                    total_commits = sum(1 for _ in repo.iter_commits('--all', max_count=min(max_commits or 50000, 50000)))
+            else:
+                total_commits = sum(1 for _ in repo.iter_commits('--all', max_count=max_commits))
+            
+            # Pre-fetch existing commit SHAs for efficient duplicate checking
+            existing_shas = set()
+            existing_commits = self.session.query(Commit.sha).filter_by(repository_id=repository_id).all()
+            existing_shas = {sha[0] for sha in existing_commits}
+            
+            # Cache contributors to avoid repeated database queries
+            contributor_cache = {}
+            existing_contributors = self.session.query(Contributor).all()
+            for contrib in existing_contributors:
+                contributor_cache[contrib.email] = contrib
+            
+            # Dynamic batch sizing based on repository size
+            if total_commits > 30000:
+                batch_size = 500  # Larger batches for big repos
+            elif total_commits > 10000:
+                batch_size = 250
+            else:
+                batch_size = 100
+            commit_batch = []
+            file_batch = []
             
             # Get commits from all branches
             for commit in repo.iter_commits('--all', max_count=max_commits):
-                # Check if commit already exists
-                existing_commit = self.session.query(Commit).filter_by(sha=commit.hexsha).first()
-                if existing_commit:
+                # Skip if commit already exists (optimized check)
+                if commit.hexsha in existing_shas:
                     continue
                 
-                # Get or create contributor
-                contributor = self.get_or_create_contributor(
-                    commit.author.name, 
-                    commit.author.email
-                )
+                # Get or create contributor (use cache)
+                contributor_email = commit.author.email
+                if contributor_email in contributor_cache:
+                    contributor = contributor_cache[contributor_email]
+                else:
+                    contributor = Contributor(
+                        name=commit.author.name,
+                        email=contributor_email,
+                        role='developer',
+                        team='unknown',
+                        experience_level='unknown'
+                    )
+                    self.session.add(contributor)
+                    self.session.flush()  # Get ID
+                    contributor_cache[contributor_email] = contributor
                 
-                # Calculate commit stats
-                stats = commit.stats
-                files_changed = len(stats.files)
-                lines_added = stats.total['insertions']
-                lines_deleted = stats.total['deletions']
+                # Calculate commit stats (optimized for large repos)
+                try:
+                    stats = commit.stats
+                    files_changed = len(stats.files)
+                    lines_added = stats.total['insertions']
+                    lines_deleted = stats.total['deletions']
+                except Exception:
+                    # Fallback for problematic commits
+                    files_changed = 0
+                    lines_added = 0
+                    lines_deleted = 0
+                    stats = type('MockStats', (), {'files': {}})()
                 
                 # Handle commit date conversion with validation
                 try:
@@ -439,18 +490,15 @@ class GitAnalyzer:
                     
                     # Validate reasonable date range (1970-2100)
                     if commit_date.year < 1970 or commit_date.year > 2100:
-                        print(f"Warning: Unusual commit date {commit_date} (timestamp: {commit_timestamp}) for commit {commit.hexsha[:8]}")
-                        # Use current time for obviously invalid dates
                         if commit_date.year < 1970:
-                            commit_date = datetime.fromtimestamp(0)  # Unix epoch as fallback
+                            commit_date = datetime.fromtimestamp(0)
                         elif commit_date.year > 2100:
                             commit_date = datetime.utcnow()
                             
-                except (ValueError, OSError) as e:
-                    print(f"Error converting timestamp {commit.committed_date} for commit {commit.hexsha[:8]}: {e}")
-                    commit_date = datetime.utcnow()  # Use current time as fallback
+                except (ValueError, OSError):
+                    commit_date = datetime.utcnow()
                 
-                # Create commit record
+                # Create commit record for batch
                 commit_record = Commit(
                     sha=commit.hexsha,
                     repository_id=repository_id,
@@ -466,38 +514,35 @@ class GitAnalyzer:
                     is_merge=len(commit.parents) > 1
                 )
                 
-                self.session.add(commit_record)
-                self.session.flush()  # Get the commit ID
-                
-                # Process individual files
-                for file_path, file_stats in stats.files.items():
-                    commit_file = CommitFile(
-                        commit_id=commit_record.id,
-                        file_path=file_path,
-                        file_type=self.get_file_type(file_path),
-                        lines_added=file_stats['insertions'],
-                        lines_deleted=file_stats['deletions'],
-                        is_test_file=self.is_test_file(file_path)
-                    )
-                    self.session.add(commit_file)
-                
+                commit_batch.append((commit_record, stats.files))
                 commits_processed += 1
                 
-                # Emit progress updates every 100 commits
-                if commits_processed % 100 == 0:
-                    print(f"Processed {commits_processed} commits...")
-                    self.session.commit()
+                # Process batch when it reaches batch_size
+                if len(commit_batch) >= batch_size:
+                    self._process_commit_batch(commit_batch, file_batch)
+                    commit_batch = []
                     
-                    if self.socketio and total_commits > 0:
-                        progress = min(95, int((commits_processed / total_commits) * 90) + 5)
-                        self.socketio.emit('analysis_progress', {
-                            'repository_id': repository_id,
-                            'stage': f'Processing commits ({commits_processed}/{total_commits})',
-                            'progress': progress,
-                            'commits_processed': commits_processed,
-                            'total_commits': total_commits
-                        })
+                    # Dynamic progress update frequency based on repo size
+                    progress_interval = 500 if total_commits > 30000 else 250 if total_commits > 10000 else 100
+                    
+                    # Emit progress updates
+                    if commits_processed % progress_interval == 0:
+                        print(f"Processed {commits_processed} commits...")
+                        if self.socketio and total_commits > 0:
+                            progress = min(95, int((commits_processed / total_commits) * 90) + 5)
+                            self.socketio.emit('analysis_progress', {
+                                'repository_id': repository_id,
+                                'stage': f'Processing commits ({commits_processed}/{total_commits})',
+                                'progress': progress,
+                                'commits_processed': commits_processed,
+                                'total_commits': total_commits
+                            })
             
+            # Process remaining commits in batch
+            if commit_batch:
+                self._process_commit_batch(commit_batch, file_batch)
+            
+            # Final commit
             self.session.commit()
             
             # Emit completion event
@@ -526,3 +571,67 @@ class GitAnalyzer:
             
             self.session.rollback()
             return 0
+    
+    def _process_commit_batch(self, commit_batch, file_batch):
+        """Process a batch of commits and their files efficiently with bulk operations"""
+        try:
+            # Add all commits to session
+            commit_records = []
+            for commit_record, file_stats in commit_batch:
+                self.session.add(commit_record)
+                commit_records.append((commit_record, file_stats))
+            
+            # Flush to get commit IDs
+            self.session.flush()
+            
+            # Bulk insert files for better performance on large batches
+            file_objects = []
+            for commit_record, file_stats in commit_records:
+                # Limit files per commit for very large commits (performance)
+                file_items = list(file_stats.items())
+                if len(file_items) > 1000:  # Skip processing commits with >1000 files
+                    print(f"Skipping file processing for large commit {commit_record.sha[:8]} with {len(file_items)} files")
+                    continue
+                    
+                for file_path, file_stat_dict in file_items:
+                    file_objects.append(CommitFile(
+                        commit_id=commit_record.id,
+                        file_path=file_path,
+                        file_type=self.get_file_type(file_path),
+                        lines_added=file_stat_dict['insertions'],
+                        lines_deleted=file_stat_dict['deletions'],
+                        is_test_file=self.is_test_file(file_path)
+                    ))
+            
+            # Bulk add file objects
+            if file_objects:
+                self.session.bulk_save_objects(file_objects)
+            
+            # Commit the batch
+            self.session.commit()
+            
+        except Exception as e:
+            print(f"Error in batch processing: {e}")
+            self.session.rollback()
+            # Fallback to individual processing
+            for commit_record, file_stats in commit_batch:
+                try:
+                    self.session.add(commit_record)
+                    self.session.flush()
+                    
+                    # Process files individually as fallback
+                    for file_path, file_stat_dict in list(file_stats.items())[:100]:  # Limit to 100 files
+                        commit_file = CommitFile(
+                            commit_id=commit_record.id,
+                            file_path=file_path,
+                            file_type=self.get_file_type(file_path),
+                            lines_added=file_stat_dict['insertions'],
+                            lines_deleted=file_stat_dict['deletions'],
+                            is_test_file=self.is_test_file(file_path)
+                        )
+                        self.session.add(commit_file)
+                    
+                    self.session.commit()
+                except Exception as inner_e:
+                    print(f"Error processing individual commit: {inner_e}")
+                    self.session.rollback()

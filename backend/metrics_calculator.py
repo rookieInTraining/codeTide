@@ -176,19 +176,29 @@ class MetricsCalculator:
                 Commit.repository_id == repository_id
             ).group_by(Contributor.id).order_by(desc(func.count(Commit.id))).all()
             
-            # For lifetime, calculate actual days for velocity
+            # Optimized single-query approach for lifetime stats
+            # Join with first commit date calculation in one query
+            stats_with_velocity = self.session.query(
+                Contributor.id,
+                Contributor.name,
+                Contributor.email,
+                Contributor.role,
+                Contributor.team,
+                func.count(Commit.id).label('commit_count'),
+                func.sum(Commit.lines_added).label('lines_added'),
+                func.sum(Commit.lines_deleted).label('lines_deleted'),
+                func.avg(Commit.files_changed).label('avg_files_per_commit'),
+                func.min(Commit.commit_date).label('first_commit_date')
+            ).join(
+                Commit, Commit.contributor_id == Contributor.id
+            ).filter(
+                Commit.repository_id == repository_id
+            ).group_by(Contributor.id).order_by(desc(func.count(Commit.id))).all()
+            
             result = []
-            for stat in stats:
-                contributor_commits = self.session.query(Commit).filter(
-                    and_(
-                        Commit.repository_id == repository_id,
-                        Commit.contributor_id == stat.id
-                    )
-                ).all()
-                
-                if contributor_commits:
-                    first_commit = min(contributor_commits, key=lambda c: c.commit_date)
-                    actual_days = max((end_date - first_commit.commit_date).days, 1)
+            for stat in stats_with_velocity:
+                if stat.first_commit_date:
+                    actual_days = max((end_date - stat.first_commit_date).days, 1)
                     velocity = stat.commit_count / actual_days
                 else:
                     velocity = 0
