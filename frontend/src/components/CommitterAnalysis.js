@@ -5,23 +5,36 @@ import {
   CardContent,
   Typography,
   Grid,
-  FormControl,
-  InputLabel,
   Select,
   MenuItem,
+  FormControl,
+  InputLabel,
   Chip,
-  OutlinedInput,
-  CircularProgress,
-  Alert,
-  Tabs,
   Tab,
-  Paper,
-  Avatar,
+  Tabs,
   Divider,
-  useTheme,
-  useMediaQuery,
+  Avatar,
+  Button,
+  Collapse,
+  Paper,
+  TextField,
+  InputAdornment,
   IconButton,
-  Collapse
+  Popper,
+  List,
+  ListItem,
+  ListItemText,
+  Checkbox,
+  CircularProgress,
+  ClickAwayListener,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Alert,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -30,7 +43,10 @@ import {
   Timeline as TimelineIcon,
   Compare as CompareIcon,
   TrendingUp as TrendingUpIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  Search as SearchIcon,
+  KeyboardArrowDown as KeyboardArrowDownIcon,
+  KeyboardArrowUp as KeyboardArrowUpIcon
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -54,6 +70,7 @@ import {
 
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
+const CONTRIBUTORS_PER_PAGE = 10;
 const MenuProps = {
   PaperProps: {
     style: {
@@ -137,6 +154,10 @@ function CommitterAnalysis() {
   const [contributorMetrics, setContributorMetrics] = useState({});
   const [comparisonData, setComparisonData] = useState([]);
   const [expandedCards, setExpandedCards] = useState({});
+  const [contributorSearch, setContributorSearch] = useState('');
+  const [displayedContributorsCount, setDisplayedContributorsCount] = useState(CONTRIBUTORS_PER_PAGE);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
 
   useEffect(() => {
     fetchRepositories();
@@ -251,6 +272,54 @@ function CommitterAnalysis() {
     setSelectedContributors(prev => prev.filter(id => id !== contributorIdToRemove));
   };
 
+  // Filter, sort, and organize contributors for dropdown
+  const filteredContributors = contributors.filter(contributor =>
+    contributor.name.toLowerCase().includes(contributorSearch.toLowerCase())
+  );
+  
+  // Sort alphabetically
+  const sortedContributors = [...filteredContributors].sort((a, b) => 
+    a.name.localeCompare(b.name)
+  );
+  
+  // Separate selected and unselected contributors
+  const selectedContributorsList = sortedContributors.filter(contributor => 
+    selectedContributors.includes(contributor.id)
+  );
+  const unselectedContributorsList = sortedContributors.filter(contributor => 
+    !selectedContributors.includes(contributor.id)
+  );
+  
+  // Combine with selected first
+  const organizedContributors = [...selectedContributorsList, ...unselectedContributorsList];
+  
+  const displayedContributors = organizedContributors.slice(0, displayedContributorsCount);
+  const hasMoreContributors = displayedContributorsCount < organizedContributors.length;
+
+  const handleContributorSearchChange = (event) => {
+    setContributorSearch(event.target.value);
+    setDisplayedContributorsCount(CONTRIBUTORS_PER_PAGE); // Reset displayed count when searching
+  };
+
+  const handleScroll = (event) => {
+    const { scrollTop, scrollHeight, clientHeight } = event.target;
+    
+    // Load more when scrolled to bottom (with 50px threshold)
+    if (scrollHeight - scrollTop <= clientHeight + 50 && hasMoreContributors) {
+      setDisplayedContributorsCount(prev => prev + CONTRIBUTORS_PER_PAGE);
+    }
+  };
+
+  const handleContributorToggle = (contributorId) => {
+    setSelectedContributors(prev => {
+      if (prev.includes(contributorId)) {
+        return prev.filter(id => id !== contributorId);
+      } else {
+        return [...prev, contributorId];
+      }
+    });
+  };
+
   const toggleCardExpansion = (cardId) => {
     setExpandedCards(prev => ({
       ...prev,
@@ -350,46 +419,162 @@ function CommitterAnalysis() {
             
             <Grid item xs={12} sm={6} md={4}>
               <FormControl fullWidth disabled={!selectedRepository}>
-                <InputLabel>Select Contributors</InputLabel>
-                <Select
-                  multiple
-                  value={selectedContributors}
-                  onChange={handleContributorChange}
-                  input={<OutlinedInput label="Select Contributors" />}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {selected.map((value) => {
-                        const contributor = contributors.find(c => c.id === value);
-                        return (
-                          <Chip 
-                            key={value} 
-                            label={contributor?.name || `ID: ${value}`}
+                <ClickAwayListener onClickAway={() => {
+                  setDropdownOpen(false);
+                  setAnchorEl(null);
+                }}>
+                  <Box>
+                    <TextField
+                      label="Select Contributors"
+                      value={selectedContributors.length > 0 ? `${selectedContributors.length} contributors selected` : ""}
+                      onClick={(event) => {
+                        setAnchorEl(event.currentTarget);
+                        setDropdownOpen(!dropdownOpen);
+                      }}
+                      InputProps={{
+                        readOnly: true,
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton size="small">
+                              {dropdownOpen ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }}
+                      placeholder={selectedContributors.length === 0 ? "Click to select contributors" : ""}
+                      sx={{ cursor: 'pointer' }}
+                    />
+                    
+                    <Popper
+                      open={dropdownOpen}
+                      anchorEl={anchorEl}
+                      placement="bottom-start"
+                      style={{ zIndex: 1300, width: anchorEl ? anchorEl.offsetWidth : 400 }}
+                    >
+                      <Paper sx={{ mt: 1, maxHeight: 400, overflow: 'hidden' }}>
+                        {/* Search Field */}
+                        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                          <TextField
+                            fullWidth
                             size="small"
-                            onDelete={() => handleContributorRemove(value)}
-                            deleteIcon={<Box component="span">×</Box>}
+                            placeholder="Search contributors..."
+                            value={contributorSearch}
+                            onChange={handleContributorSearchChange}
+                            InputProps={{
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <SearchIcon />
+                                </InputAdornment>
+                              ),
+                            }}
                           />
-                        );
-                      })}
-                    </Box>
-                  )}
-                  MenuProps={MenuProps}
-                >
-                  {contributors.map((contributor) => (
-                    <MenuItem key={contributor.id} value={contributor.id}>
-                      <Box display="flex" alignItems="center" width="100%">
-                        <Avatar sx={{ width: 24, height: 24, mr: 1, fontSize: '0.75rem' }}>
-                          {contributor.name.charAt(0).toUpperCase()}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="body2">{contributor.name}</Typography>
+                        </Box>
+
+                        {/* Contributors List with Infinite Scroll */}
+                        <List 
+                          sx={{ 
+                            maxHeight: 280, 
+                            overflow: 'auto',
+                            '&::-webkit-scrollbar': {
+                              width: '6px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                              background: '#f1f1f1',
+                              borderRadius: '3px',
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                              background: '#c1c1c1',
+                              borderRadius: '3px',
+                            },
+                            '&::-webkit-scrollbar-thumb:hover': {
+                              background: '#a8a8a8',
+                            },
+                          }}
+                          onScroll={handleScroll}
+                        >
+                          {displayedContributors.map((contributor) => {
+                            const isSelected = selectedContributors.includes(contributor.id);
+                            return (
+                              <ListItem
+                                key={contributor.id}
+                                button
+                                onClick={() => {
+                                  const newSelected = isSelected
+                                    ? selectedContributors.filter(id => id !== contributor.id)
+                                    : [...selectedContributors, contributor.id];
+                                  setSelectedContributors(newSelected);
+                                }}
+                                sx={{
+                                  backgroundColor: isSelected ? 'primary.light' : 'transparent',
+                                  '&:hover': {
+                                    backgroundColor: isSelected ? 'primary.main' : 'action.hover',
+                                  },
+                                  opacity: isSelected ? 1 : 0.8,
+                                  borderLeft: isSelected ? '3px solid' : 'none',
+                                  borderLeftColor: 'primary.main'
+                                }}
+                              >
+                                <Checkbox
+                                  checked={isSelected}
+                                  tabIndex={-1}
+                                  disableRipple
+                                  color="primary"
+                                />
+                                <ListItemText 
+                                  primary={contributor.name}
+                                  sx={{
+                                    '& .MuiListItemText-primary': {
+                                      fontWeight: isSelected ? 600 : 400,
+                                      color: isSelected ? 'primary.contrastText' : 'text.primary'
+                                    }
+                                  }}
+                                />
+                              </ListItem>
+                            );
+                          })}
+                          
+                          {/* Loading indicator when more items are being loaded */}
+                          {hasMoreContributors && (
+                            <ListItem sx={{ justifyContent: 'center', py: 2 }}>
+                              <CircularProgress size={20} />
+                              <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                                Loading more contributors...
+                              </Typography>
+                            </ListItem>
+                          )}
+                          
+                          {filteredContributors.length === 0 && (
+                            <ListItem>
+                              <ListItemText 
+                                primary="No contributors found"
+                                sx={{ textAlign: 'center', color: 'text.secondary' }}
+                              />
+                            </ListItem>
+                          )}
+                          
+                          {/* End of list indicator */}
+                          {!hasMoreContributors && filteredContributors.length > CONTRIBUTORS_PER_PAGE && (
+                            <ListItem sx={{ justifyContent: 'center', py: 1 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                All contributors loaded
+                              </Typography>
+                            </ListItem>
+                          )}
+                        </List>
+
+                        {/* Footer with selection info */}
+                        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'grey.50' }}>
                           <Typography variant="caption" color="text.secondary">
-                            {contributor.role || 'Developer'} • {contributor.team || 'No Team'}
+                            {selectedContributors.length} of {contributors.length} contributors selected
+                            {filteredContributors.length !== contributors.length && 
+                              ` • ${filteredContributors.length} shown`
+                            }
                           </Typography>
                         </Box>
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
+                      </Paper>
+                    </Popper>
+                  </Box>
+                </ClickAwayListener>
               </FormControl>
             </Grid>
             
@@ -602,65 +787,141 @@ function CommitterAnalysis() {
           <TabPanel value={tabValue} index={1}>
             {comparisonData.length > 1 && (
               <Grid container spacing={3}>
-                {/* Comparison Metrics */}
+                {/* Mobile-First Comparison Cards */}
                 <Grid item xs={12}>
                   <Card>
                     <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                      <Typography variant="h6" gutterBottom>
+                      <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
                         Side-by-Side Comparison
                       </Typography>
                       
-                      <Box sx={{ overflowX: 'auto' }}>
-                        <Box sx={{ minWidth: 600 }}>
-                          <Grid container spacing={2}>
-                            <Grid item xs={3}>
-                              <Typography variant="subtitle2" color="text.secondary">
-                                Metric
-                              </Typography>
-                            </Grid>
-                            {comparisonData.map((contributor) => (
-                              <Grid item xs={3} key={contributor.contributor_id}>
-                                <Box display="flex" alignItems="center">
-                                  <Avatar sx={{ width: 24, height: 24, mr: 1, fontSize: '0.75rem' }}>
-                                    {contributor.name.charAt(0).toUpperCase()}
-                                  </Avatar>
-                                  <Typography variant="subtitle2" noWrap>
-                                    {contributor.name}
-                                  </Typography>
-                                </Box>
-                              </Grid>
-                            ))}
-                          </Grid>
-                          
-                          <Divider sx={{ my: 2 }} />
-                          
-                          {[
-                            { key: 'total_commits', label: 'Total Commits' },
-                            { key: 'lines_added', label: 'Lines Added' },
-                            { key: 'lines_deleted', label: 'Lines Deleted' },
-                            { key: 'files_modified', label: 'Files Modified' },
-                            { key: 'commit_velocity', label: 'Commits/Day' },
-                            { key: 'code_churn_ratio', label: 'Churn Ratio' }
-                          ].map((metric) => (
-                            <Grid container spacing={2} key={metric.key} sx={{ mb: 1 }}>
-                              <Grid item xs={3}>
-                                <Typography variant="body2">
-                                  {metric.label}
+                      {/* Mobile View - Stacked Cards */}
+                      <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+                        {comparisonData.map((contributor, index) => (
+                          <Card 
+                            key={contributor.contributor_id} 
+                            variant="outlined" 
+                            sx={{ mb: 2, bgcolor: index % 2 === 0 ? 'grey.50' : 'background.paper' }}
+                          >
+                            <CardContent sx={{ p: 2 }}>
+                              <Box display="flex" alignItems="center" sx={{ mb: 2 }}>
+                                <Avatar sx={{ width: 32, height: 32, mr: 2, bgcolor: 'primary.main' }}>
+                                  {contributor.name.charAt(0).toUpperCase()}
+                                </Avatar>
+                                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                  {contributor.name}
                                 </Typography>
+                              </Box>
+                              
+                              <Grid container spacing={2}>
+                                {[
+                                  { key: 'total_commits', label: 'Total Commits', icon: '📊' },
+                                  { key: 'lines_added', label: 'Lines Added', icon: '➕' },
+                                  { key: 'lines_deleted', label: 'Lines Deleted', icon: '➖' },
+                                  { key: 'files_modified', label: 'Files Modified', icon: '📁' },
+                                  { key: 'commit_velocity', label: 'Commits/Day', icon: '⚡' },
+                                  { key: 'code_churn_ratio', label: 'Churn Ratio', icon: '🔄' }
+                                ].map((metric) => (
+                                  <Grid item xs={6} key={metric.key}>
+                                    <Box sx={{ textAlign: 'center', p: 1, borderRadius: 1, bgcolor: 'background.paper' }}>
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                        {metric.icon} {metric.label}
+                                      </Typography>
+                                      <Typography variant="h6" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                        {typeof contributor[metric.key] === 'number' 
+                                          ? contributor[metric.key].toLocaleString()
+                                          : contributor[metric.key] || 'N/A'
+                                        }
+                                      </Typography>
+                                    </Box>
+                                  </Grid>
+                                ))}
                               </Grid>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </Box>
+
+                      {/* Desktop View - Table */}
+                      <Box sx={{ display: { xs: 'none', md: 'block' }, overflowX: 'auto' }}>
+                        <Table sx={{ minWidth: 650 }}>
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: 'grey.100' }}>
+                              <TableCell sx={{ fontWeight: 600, minWidth: 150 }}>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                  Metric
+                                </Typography>
+                              </TableCell>
                               {comparisonData.map((contributor) => (
-                                <Grid item xs={3} key={contributor.contributor_id}>
-                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                    {typeof contributor[metric.key] === 'number' 
-                                      ? contributor[metric.key].toLocaleString()
-                                      : contributor[metric.key] || 'N/A'
-                                    }
-                                  </Typography>
-                                </Grid>
+                                <TableCell key={contributor.contributor_id} align="center" sx={{ minWidth: 120 }}>
+                                  <Box display="flex" flexDirection="column" alignItems="center">
+                                    <Avatar sx={{ width: 40, height: 40, mb: 1, bgcolor: 'primary.main' }}>
+                                      {contributor.name.charAt(0).toUpperCase()}
+                                    </Avatar>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600, textAlign: 'center' }}>
+                                      {contributor.name}
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
                               ))}
-                            </Grid>
-                          ))}
-                        </Box>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {[
+                              { key: 'total_commits', label: 'Total Commits', icon: '📊' },
+                              { key: 'lines_added', label: 'Lines Added', icon: '➕' },
+                              { key: 'lines_deleted', label: 'Lines Deleted', icon: '➖' },
+                              { key: 'files_modified', label: 'Files Modified', icon: '📁' },
+                              { key: 'commit_velocity', label: 'Commits/Day', icon: '⚡' },
+                              { key: 'code_churn_ratio', label: 'Churn Ratio', icon: '🔄' }
+                            ].map((metric, index) => (
+                              <TableRow 
+                                key={metric.key} 
+                                sx={{ 
+                                  '&:nth-of-type(odd)': { bgcolor: 'grey.50' },
+                                  '&:hover': { bgcolor: 'action.hover' }
+                                }}
+                              >
+                                <TableCell sx={{ fontWeight: 500 }}>
+                                  <Box display="flex" alignItems="center">
+                                    <Typography sx={{ mr: 1, fontSize: '1.2rem' }}>
+                                      {metric.icon}
+                                    </Typography>
+                                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                                      {metric.label}
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                                {comparisonData.map((contributor) => {
+                                  const value = contributor[metric.key];
+                                  const isHighest = comparisonData.every(c => 
+                                    typeof c[metric.key] === 'number' && typeof value === 'number' 
+                                      ? c[metric.key] <= value 
+                                      : false
+                                  );
+                                  
+                                  return (
+                                    <TableCell key={contributor.contributor_id} align="center">
+                                      <Typography 
+                                        variant="body1" 
+                                        sx={{ 
+                                          fontWeight: isHighest && typeof value === 'number' ? 700 : 500,
+                                          color: isHighest && typeof value === 'number' ? 'primary.main' : 'text.primary',
+                                          fontSize: '1rem'
+                                        }}
+                                      >
+                                        {typeof value === 'number' 
+                                          ? value.toLocaleString()
+                                          : value || 'N/A'
+                                        }
+                                      </Typography>
+                                    </TableCell>
+                                  );
+                                })}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </Box>
                     </CardContent>
                   </Card>
