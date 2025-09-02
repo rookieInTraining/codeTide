@@ -187,7 +187,18 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
     fetch(`http://localhost:5000/api/repositories/${repository.id}/pull`, {
       method: 'POST'
     })
-    .then(response => response.json())
+    .then(response => {
+      if (!response.ok) {
+        // Handle HTTP error status codes (400, 500, etc.)
+        return response.json().then(errorData => {
+          throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        }).catch(() => {
+          // If JSON parsing fails, use status text
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        });
+      }
+      return response.json();
+    })
     .then(data => {
       if (!data.error) {
         console.log('Pull operation initiated:', data);

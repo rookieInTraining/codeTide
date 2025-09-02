@@ -43,7 +43,7 @@ ChartJS.register(
   ArcElement
 );
 
-const Dashboard = ({ repository }) => {
+const Dashboard = ({ repositories, selectedRepository, onRepositoryChange }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
@@ -78,12 +78,12 @@ const Dashboard = ({ repository }) => {
     dailyActivity: false,
     commitTypes: false
   });
-  const [timePeriod, setTimePeriod] = useState(() => getStoredState('timePeriod', 30));
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState({ open: false, repositoryName: '', repositoryId: null });
+  const [timePeriod, setTimePeriod] = useState(() => getStoredState('timePeriod', 30));
 
   useEffect(() => {
-    if (repository) {
+    if (selectedRepository) {
       // Check if we have stored data to display immediately
       const hasStoredData = getStoredState('metrics', null) && 
                            getStoredState('contributors', null) && 
@@ -94,10 +94,10 @@ const Dashboard = ({ repository }) => {
         setLoading(false);
       }
     }
-  }, [repository]);
+  }, [selectedRepository]);
 
   const fetchAllData = async () => {
-    if (!repository) return;
+    if (!selectedRepository) return;
     
     setLoading(true);
     setError(null);
@@ -123,9 +123,9 @@ const Dashboard = ({ repository }) => {
     setLoadingStates(prev => ({ ...prev, metrics: true }));
     try {
       const [velocityRes, churnRes, testCoverageRes] = await Promise.all([
-        fetch(`http://localhost:5000/api/metrics/velocity?repository_id=${repository.id}&days=${timePeriod}`),
-        fetch(`http://localhost:5000/api/metrics/churn?repository_id=${repository.id}&days=${timePeriod}`),
-        fetch(`http://localhost:5000/api/metrics/test-coverage?repository_id=${repository.id}&days=${timePeriod}`)
+        fetch(`http://localhost:5000/api/metrics/velocity?repository_id=${selectedRepository.id}&days=${timePeriod}`),
+        fetch(`http://localhost:5000/api/metrics/churn?repository_id=${selectedRepository.id}&days=${timePeriod}`),
+        fetch(`http://localhost:5000/api/metrics/test-coverage?repository_id=${selectedRepository.id}&days=${timePeriod}`)
       ]);
 
       const velocity = await velocityRes.json();
@@ -143,7 +143,7 @@ const Dashboard = ({ repository }) => {
   const fetchContributors = async () => {
     setLoadingStates(prev => ({ ...prev, contributors: true }));
     try {
-      const response = await fetch(`http://localhost:5000/api/metrics/contributors?repository_id=${repository.id}&days=${timePeriod}`);
+      const response = await fetch(`http://localhost:5000/api/metrics/contributors?repository_id=${selectedRepository.id}&days=${timePeriod}`);
       const data = await response.json();
       setContributors(data);
       setStoredState('contributors', data);
@@ -155,7 +155,7 @@ const Dashboard = ({ repository }) => {
   const fetchDailyActivity = async () => {
     setLoadingStates(prev => ({ ...prev, dailyActivity: true }));
     try {
-      const response = await fetch(`http://localhost:5000/api/charts/daily-activity?repository_id=${repository.id}&days=${timePeriod}`);
+      const response = await fetch(`http://localhost:5000/api/charts/daily-activity?repository_id=${selectedRepository.id}&days=${timePeriod}`);
       const data = await response.json();
       setDailyActivity(data);
       setStoredState('dailyActivity', data);
@@ -167,7 +167,7 @@ const Dashboard = ({ repository }) => {
   const fetchCommitTypes = async () => {
     setLoadingStates(prev => ({ ...prev, commitTypes: true }));
     try {
-      const response = await fetch(`http://localhost:5000/api/charts/commit-types?repository_id=${repository.id}&days=${timePeriod}`);
+      const response = await fetch(`http://localhost:5000/api/charts/commit-types?repository_id=${selectedRepository.id}&days=${timePeriod}`);
       const data = await response.json();
       setCommitTypes(data);
       setStoredState('commitTypes', data);
@@ -179,8 +179,8 @@ const Dashboard = ({ repository }) => {
   const analyzeRepository = async () => {
     setAnalysisProgress({ 
       open: true, 
-      repositoryName: repository.name, 
-      repositoryId: repository.id 
+      repositoryName: selectedRepository.name, 
+      repositoryId: selectedRepository.id 
     });
   };
 
@@ -264,70 +264,111 @@ const Dashboard = ({ repository }) => {
         </Alert>
       )}
 
-      <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ mb: { xs: 2, sm: 2.5, md: 3 } }}>
-        <Grid item xs={12} sm={6} md={4}>
-          <FormControl {...formStyles.formControl}>
-            <InputLabel>Time Period</InputLabel>
-            <Select
-              value={timePeriod}
-              onChange={(e) => {
-                setTimePeriod(e.target.value);
-                setStoredState('timePeriod', e.target.value);
-              }}
-              label="Time Period"
-            >
-              <MenuItem value={7}>Last 7 days</MenuItem>
-              <MenuItem value={30}>Last 30 days</MenuItem>
-              <MenuItem value={90}>Last 90 days</MenuItem>
-              <MenuItem value={365}>Year to date</MenuItem>
-              <MenuItem value={730}>Last year</MenuItem>
-              <MenuItem value={0}>Lifetime</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} sm={6} md={8}>
-          <Button
-            {...formStyles.button.primary}
-            onClick={fetchAllData}
-            disabled={loading || analysisProgress.open}
-          >
-            {loading ? (
-              <CircularProgress size={24} />
-            ) : (
-              <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
-                Load Dashboard Data
-              </Box>
-            )}
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline', md: 'none' } }}>
-              {loading ? <CircularProgress size={22} /> : 'Load Data'}
-            </Box>
-            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
-              {loading ? <CircularProgress size={20} /> : 'Load'}
-            </Box>
-          </Button>
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <Button
-            {...formStyles.button.secondary}
-            onClick={analyzeRepository}
-            disabled={analysisProgress.open}
-          >
-            {analysisProgress.open ? (
-              <CircularProgress size={24} />
-            ) : (
-              <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
-                Analyze Repository
-              </Box>
-            )}
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline', md: 'none' } }}>
-              {analysisProgress.open ? <CircularProgress size={22} /> : 'Analyze Repo'}
-            </Box>
-            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
-              {analysisProgress.open ? <CircularProgress size={20} /> : 'Analyze'}
-            </Box>
-          </Button>
-        </Grid>
-      </Grid>
+      {/* Repository & Dashboard Configuration */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent sx={{ ...formStyles.cardPadding }}>
+          <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+            Repository & Dashboard Configuration
+          </Typography>
+          
+          <Grid container spacing={formStyles.gridSpacing.container} alignItems="center">
+            <Grid item xs={12} sm={6} md={3} lg={2}>
+              <FormControl {...formStyles.formControl}>
+                <InputLabel>Select Repository</InputLabel>
+                <Select
+                  value={selectedRepository?.id || ''}
+                  onChange={(e) => {
+                    const repo = repositories.find(r => r.id === e.target.value);
+                    onRepositoryChange(repo);
+                  }}
+                  label="Select Repository"
+                >
+                  {repositories.map((repo) => (
+                    <MenuItem key={repo.id} value={repo.id}>
+                      {repo.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={2} lg={2}>
+              <FormControl {...formStyles.formControl}>
+                <InputLabel>Time Period</InputLabel>
+                <Select
+                  value={timePeriod}
+                  onChange={(e) => {
+                    setTimePeriod(e.target.value);
+                    setStoredState('timePeriod', e.target.value);
+                  }}
+                  label="Time Period"
+                >
+                  <MenuItem value={7}>Last 7 days</MenuItem>
+                  <MenuItem value={30}>Last 30 days</MenuItem>
+                  <MenuItem value={90}>Last 90 days</MenuItem>
+                  <MenuItem value={365}>Year to date</MenuItem>
+                  <MenuItem value={730}>Last year</MenuItem>
+                  <MenuItem value={0}>Lifetime</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3} lg={3}>
+              <Button
+                {...formStyles.button.primary}
+                onClick={fetchAllData}
+                disabled={loading || analysisProgress.open}
+              >
+                {loading ? (
+                  <Box display="flex" alignItems="center">
+                    <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} />
+                    Loading...
+                  </Box>
+                ) : (
+                  'Load Dashboard Data'
+                )}
+              </Button>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={2} lg={3}>
+              <Button
+                {...formStyles.button.secondary}
+                onClick={analyzeRepository}
+                disabled={analysisProgress.open}
+              >
+                {analysisProgress.open ? (
+                  <Box display="flex" alignItems="center">
+                    <CircularProgress size={20} sx={{ mr: 1 }} />
+                    Analyzing...
+                  </Box>
+                ) : (
+                  'Analyze Repository'
+                )}
+              </Button>
+            </Grid>
+            
+            <Grid item xs={12} sm={12} md={2} lg={2}>
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ 
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  textAlign: { xs: 'center', sm: 'left' },
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: '56px'
+                }}
+              >
+                {selectedRepository?.last_analyzed 
+                  ? `Last analyzed: ${new Date(selectedRepository.last_analyzed).toLocaleString()}`
+                  : 'Not analyzed yet'
+                }
+              </Typography>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+
 
       {/* Key Metrics */}
       <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ mb: { xs: 3, sm: 3.5, md: 4 } }}>

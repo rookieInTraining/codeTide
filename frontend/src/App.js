@@ -101,6 +101,11 @@ function App() {
     fetchRepositories();
   };
 
+  const handleRepositoryChange = (repo) => {
+    setSelectedRepo(repo);
+    setStoredState('selectedRepo', repo);
+  };
+
   if (loading) {
     return (
       <ThemeProvider theme={theme}>
@@ -201,52 +206,12 @@ function App() {
           <Routes>
             <Route path="/" element={
               <>
-                {repositories.length > 0 && (
-                  <Card sx={{ mb: { xs: 2, sm: 3 } }}>
-                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                      <Grid container spacing={{ xs: 2, sm: 2 }} alignItems="center">
-                        <Grid item xs={12} sm={6}>
-                          <FormControl {...formStyles.formControl}>
-                            <InputLabel>Select Repository</InputLabel>
-                            <Select
-                              value={selectedRepo?.id || ''}
-                              onChange={(e) => {
-                                const repo = repositories.find(r => r.id === e.target.value);
-                                setSelectedRepo(repo);
-                                setStoredState('selectedRepo', repo);
-                              }}
-                              label="Select Repository"
-                            >
-                              {repositories.map((repo) => (
-                                <MenuItem key={repo.id} value={repo.id}>
-                                  {repo.name}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                          <Typography 
-                            variant="body2" 
-                            color="text.secondary"
-                            sx={{ 
-                              fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                              textAlign: { xs: 'center', sm: 'left' }
-                            }}
-                          >
-                            {selectedRepo?.last_analyzed 
-                              ? `Last analyzed: ${new Date(selectedRepo.last_analyzed).toLocaleString()}`
-                              : 'Not analyzed yet'
-                            }
-                          </Typography>
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {selectedRepo ? (
-                  <Dashboard repository={selectedRepo} />
+                {repositories.length > 0 ? (
+                  <Dashboard 
+                    repositories={repositories}
+                    selectedRepository={selectedRepo}
+                    onRepositoryChange={handleRepositoryChange}
+                  />
                 ) : (
                   <Card>
                     <CardContent sx={{ 
