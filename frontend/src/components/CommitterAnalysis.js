@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Box,
   Card,
   CardContent,
   Typography,
@@ -23,19 +22,23 @@ import {
   Popper,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   Checkbox,
+  Box,
+  Alert,
   CircularProgress,
+  useTheme,
+  useMediaQuery,
   ClickAwayListener,
   Table,
-  TableBody,
-  TableCell,
   TableHead,
   TableRow,
-  Alert,
-  useTheme,
-  useMediaQuery
+  TableCell,
+  TableBody,
+  Tooltip as MuiTooltip
 } from '@mui/material';
+import { formStyles } from '../theme/formStyles';
 import {
   ExpandMore as ExpandMoreIcon,
   Person as PersonIcon,
@@ -46,8 +49,10 @@ import {
   Schedule as ScheduleIcon,
   Search as SearchIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
-  KeyboardArrowUp as KeyboardArrowUpIcon
+  KeyboardArrowUp as KeyboardArrowUpIcon,
+  HelpOutline as HelpIcon
 } from '@mui/icons-material';
+import { getTooltipContent } from '../utils/metricTooltips';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -62,6 +67,25 @@ import {
 } from 'chart.js';
 import { Line, Pie, Bar } from 'react-chartjs-2';
 
+// Custom TabPanel component to avoid @mui/lab dependency
+function TabPanel({ children, value, index, ...other }) {
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`tabpanel-${index}`}
+      aria-labelledby={`tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -74,63 +98,124 @@ ChartJS.register(
   BarElement
 );
 
-
-const ITEM_HEIGHT = 48;
-const ITEM_PADDING_TOP = 8;
-const CONTRIBUTORS_PER_PAGE = 10;
-const MenuProps = {
-  PaperProps: {
-    style: {
-      maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
-      width: 250,
-    },
-  },
+// Helper functions for data formatting
+const formatCommitTypeData = (commitTypes) => {
+  if (!commitTypes || typeof commitTypes !== 'object') return { labels: [], datasets: [] };
+  
+  const entries = Object.entries(commitTypes);
+  if (entries.length === 0) return { labels: [], datasets: [] };
+  
+  const labels = entries.map(([type]) => type || 'Unknown');
+  const counts = entries.map(([, count]) => count || 0);
+  
+  return {
+    labels,
+    datasets: [{
+      data: counts,
+      backgroundColor: [
+        '#FF6384',
+        '#36A2EB', 
+        '#FFCE56',
+        '#4BC0C0',
+        '#9966FF',
+        '#FF9F40'
+      ]
+    }]
+  };
 };
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
-
-function TabPanel({ children, value, index, ...other }) {
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`committer-tabpanel-${index}`}
-      aria-labelledby={`committer-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
-    </div>
-  );
-}
-
-function MetricCard({ title, value, subtitle, icon, color = 'primary' }) {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+const formatActivityData = (data, granularity = 'daily') => {
+  if (!data || !Array.isArray(data)) return { labels: [], datasets: [] };
   
+  const labels = data.map(item => {
+    const date = new Date(item.date);
+    if (granularity === 'monthly') {
+      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    }
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
+  
+  const commits = data.map(item => item.commits || 0);
+  
+  return {
+    labels,
+    datasets: [{
+      label: 'Commits',
+      data: commits,
+      borderColor: '#36A2EB',
+      backgroundColor: 'rgba(54, 162, 235, 0.1)',
+      tension: 0.1
+    }]
+  };
+};
+
+const getActivityGranularity = (timeRange) => {
+  switch (timeRange) {
+    case '7d':
+    case '30d':
+      return 'daily';
+    case '3m':
+    case 'ytd':
+    case 'all':
+      return 'monthly';
+    default:
+      return 'daily';
+  }
+};
+
+const getActivityAxisLabel = (granularity) => {
+  return granularity === 'monthly' ? 'Month' : 'Date';
+};
+
+const CONTRIBUTORS_PER_PAGE = 20;
+
+function MetricCard({ title, value, subtitle, isExpanded, onToggle, children, tooltipKey }) {
   return (
-    <Card sx={{ height: '100%', position: 'relative' }}>
-      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-        <Box display="flex" alignItems="center" mb={1}>
-          <Avatar 
-            sx={{ 
-              bgcolor: `${color}.main`, 
-              width: { xs: 32, sm: 40 }, 
-              height: { xs: 32, sm: 40 },
-              mr: 2 
-            }}
-          >
-            {icon}
-          </Avatar>
-          <Typography 
-            variant={isMobile ? 'body2' : 'h6'} 
-            color="text.secondary"
-            sx={{ fontWeight: 500 }}
-          >
-            {title}
-          </Typography>
+    <Card sx={{ height: '100%' }}>
+      <CardContent sx={{ p: 2 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+          <Box display="flex" alignItems="center" gap={0.5}>
+            <Typography variant="h6" component="h3" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+              {title}
+            </Typography>
+            {tooltipKey && (
+              <MuiTooltip 
+                title={
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      {getTooltipContent(tooltipKey).title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      {getTooltipContent(tooltipKey).description}
+                    </Typography>
+                  </Box>
+                }
+                arrow
+                placement="top"
+              >
+                <IconButton size="small" sx={{ p: 0.25 }}>
+                  <HelpIcon fontSize="small" sx={{ fontSize: '0.875rem' }} />
+                </IconButton>
+              </MuiTooltip>
+            )}
+          </Box>
+          {children && (
+            <IconButton 
+              size="small" 
+              onClick={onToggle}
+              sx={{ 
+                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s'
+              }}
+            >
+              <ExpandMoreIcon />
+            </IconButton>
+          )}
         </Box>
         <Typography 
-          variant={isMobile ? 'h6' : 'h4'} 
+          variant="h4" 
+          component="div" 
+          color="primary"
           sx={{ fontWeight: 'bold', mb: 0.5 }}
         >
           {value}
@@ -151,20 +236,41 @@ function CommitterAnalysis() {
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
   const [repositories, setRepositories] = useState([]);
-  const [selectedRepository, setSelectedRepository] = useState(null);
+  // Persistent state management
+  const getStoredState = (key, defaultValue) => {
+    try {
+      const stored = localStorage.getItem(`committerAnalysis_${key}`);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  const setStoredState = (key, value) => {
+    try {
+      localStorage.setItem(`committerAnalysis_${key}`, JSON.stringify(value));
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
+  const [selectedRepository, setSelectedRepository] = useState(() => getStoredState('selectedRepository', null));
   const [contributors, setContributors] = useState([]);
-  const [selectedContributors, setSelectedContributors] = useState([]);
-  const [timeRange, setTimeRange] = useState(30);
+  const [selectedContributors, setSelectedContributors] = useState(() => getStoredState('selectedContributors', []));
+  const [timeRange, setTimeRange] = useState(() => getStoredState('timeRange', 0));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [tabValue, setTabValue] = useState(0);
-  const [contributorMetrics, setContributorMetrics] = useState({});
-  const [comparisonData, setComparisonData] = useState([]);
+  const [tabValue, setTabValue] = useState(() => getStoredState('tabValue', 0));
+  const [contributorMetrics, setContributorMetrics] = useState(() => getStoredState('contributorMetrics', {}));
+  const [contributorTimelines, setContributorTimelines] = useState(() => getStoredState('contributorTimelines', {}));
+  const [comparisonData, setComparisonData] = useState(() => getStoredState('comparisonData', []));
   const [expandedCards, setExpandedCards] = useState({});
   const [contributorSearch, setContributorSearch] = useState('');
   const [displayedContributorsCount, setDisplayedContributorsCount] = useState(CONTRIBUTORS_PER_PAGE);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchRepositories();
@@ -173,21 +279,10 @@ function CommitterAnalysis() {
   useEffect(() => {
     if (selectedRepository) {
       fetchContributors();
-      // Reset selected contributors when repository changes
-      setSelectedContributors([]);
-      setContributorMetrics({});
-      setComparisonData([]);
     }
   }, [selectedRepository]);
 
-  useEffect(() => {
-    if (selectedContributors.length > 0 && selectedRepository) {
-      fetchContributorMetrics();
-      if (selectedContributors.length > 1) {
-        fetchComparisonData();
-      }
-    }
-  }, [selectedContributors, timeRange]);
+  // Remove automatic data fetching - now only triggered by form submission
 
   const fetchRepositories = async () => {
     try {
@@ -196,14 +291,9 @@ function CommitterAnalysis() {
       if (!response.ok) throw new Error('Failed to fetch repositories');
       const data = await response.json();
       setRepositories(data);
-      
-      // Auto-select first repository if none selected
-      if (data.length > 0 && !selectedRepository) {
-        setSelectedRepository(data[0]);
-      }
-      setLoading(false);
     } catch (err) {
-      setError(err.message);
+      setError('Failed to load repositories. Please check your connection.');
+    } finally {
       setLoading(false);
     }
   };
@@ -216,48 +306,78 @@ function CommitterAnalysis() {
       if (!response.ok) throw new Error('Failed to fetch contributors');
       const data = await response.json();
       setContributors(data);
-      
-      // Auto-select first contributor if none selected
-      if (data.length > 0 && selectedContributors.length === 0) {
-        setSelectedContributors([data[0].id]);
-      }
     } catch (err) {
-      setError(err.message);
+      setError('Failed to load contributors for this repository.');
     }
   };
 
-  const fetchContributorMetrics = async () => {
-    if (!selectedRepository) return;
-    
-    const metrics = {};
-    for (const contributorId of selectedContributors) {
-      try {
-        // Fetch detailed metrics
-        const metricsResponse = await fetch(
-          `http://localhost:5000/api/contributors/${contributorId}/metrics?repository_id=${selectedRepository.id}&days=${timeRange}`
-        );
-        if (metricsResponse.ok) {
-          const metricsData = await metricsResponse.json();
-          
-          // Fetch activity timeline for actual dates
-          const timelineResponse = await fetch(
-            `http://localhost:5000/api/contributors/${contributorId}/activity-timeline?repository_id=${selectedRepository.id}&days=${timeRange}`
-          );
-          if (timelineResponse.ok) {
-            const timelineData = await timelineResponse.json();
-            metricsData.activity_timeline = timelineData;
+  const fetchContributorMetrics = useCallback(async () => {
+    if (!selectedRepository || selectedContributors.length === 0) return;
+
+    setIsAnalyzing(true);
+    try {
+      const metricsPromises = selectedContributors.map(async (contributorId) => {
+        try {
+          const response = await fetch(`http://localhost:5000/api/contributors/${contributorId}/metrics?repository_id=${selectedRepository.id}&days=${timeRange}`);
+          if (!response.ok) {
+            console.warn(`Failed to fetch metrics for contributor ${contributorId}`);
+            return null;
           }
-          
-          metrics[contributorId] = metricsData;
+          const data = await response.json();
+          return { contributorId, data };
+        } catch (error) {
+          console.warn(`Error fetching metrics for contributor ${contributorId}:`, error);
+          return null;
         }
-      } catch (err) {
-        console.error(`Failed to fetch metrics for contributor ${contributorId}:`, err);
-      }
-    }
-    setContributorMetrics(metrics);
-  };
+      });
 
-  const fetchComparisonData = async () => {
+      const timelinePromises = selectedContributors.map(async (contributorId) => {
+        try {
+          const response = await fetch(`http://localhost:5000/api/contributors/${contributorId}/activity-timeline?repository_id=${selectedRepository.id}&days=${timeRange}`);
+          if (!response.ok) {
+            console.warn(`Failed to fetch timeline for contributor ${contributorId}`);
+            return null;
+          }
+          const data = await response.json();
+          return { contributorId, data };
+        } catch (error) {
+          console.warn(`Error fetching timeline for contributor ${contributorId}:`, error);
+          return null;
+        }
+      });
+
+      const [metricsResults, timelineResults] = await Promise.all([Promise.all(metricsPromises), Promise.all(timelinePromises)]);
+      
+      const metrics = {};
+      const timelines = {};
+      
+      metricsResults.forEach(result => {
+        if (result) {
+          metrics[result.contributorId] = result.data;
+        }
+      });
+
+      timelineResults.forEach(result => {
+        if (result) {
+          timelines[result.contributorId] = result.data;
+        }
+      });
+      
+      console.log('Final contributor metrics:', metrics);
+      console.log('Final contributor timelines:', timelines);
+      setContributorMetrics(metrics);
+      setContributorTimelines(timelines);
+      setStoredState('contributorMetrics', metrics);
+      setStoredState('contributorTimelines', timelines);
+    } catch (err) {
+      console.error('Failed to fetch contributor data:', err);
+      setError('Failed to load contributor data. This may be due to large commit volumes.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [selectedRepository, selectedContributors, timeRange]);
+
+  const fetchComparisonData = useCallback(async () => {
     if (!selectedRepository) return;
     
     try {
@@ -279,47 +399,61 @@ function CommitterAnalysis() {
     } catch (err) {
       console.error('Failed to fetch comparison data:', err);
     }
-  };
+  }, [selectedRepository, selectedContributors, timeRange]);
 
-  const handleContributorChange = (event) => {
+  const handleFormSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    
+    if (!selectedRepository || selectedContributors.length === 0) {
+      setError('Please select a repository and at least one contributor.');
+      return;
+    }
+    
+    setError(null);
+    setFormSubmitted(true);
+    
+    // Run metrics and comparison fetching in parallel
+    const promises = [fetchContributorMetrics()];
+    if (selectedContributors.length > 1) {
+      promises.push(fetchComparisonData());
+    }
+    
+    await Promise.all(promises);
+  }, [selectedRepository, selectedContributors, fetchContributorMetrics, fetchComparisonData]);
+
+  const handleContributorChange = useCallback((event) => {
     const value = event.target.value;
-    setSelectedContributors(typeof value === 'string' ? value.split(',') : value);
-  };
+    const contributors = typeof value === 'string' ? value.split(',') : value;
+    setSelectedContributors(contributors);
+    setStoredState('selectedContributors', contributors);
+  }, []);
 
-  const handleContributorRemove = (contributorIdToRemove) => {
-    setSelectedContributors(prev => prev.filter(id => id !== contributorIdToRemove));
-  };
+  const handleContributorRemove = useCallback((contributorIdToRemove) => {
+    setSelectedContributors(prev => {
+      const updated = prev.filter(id => id !== contributorIdToRemove);
+      setStoredState('selectedContributors', updated);
+      return updated;
+    });
+  }, []);
 
-  // Filter, sort, and organize contributors for dropdown
-  const filteredContributors = contributors.filter(contributor =>
-    contributor.name.toLowerCase().includes(contributorSearch.toLowerCase())
-  );
-  
-  // Sort alphabetically
-  const sortedContributors = [...filteredContributors].sort((a, b) => 
-    a.name.localeCompare(b.name)
-  );
-  
-  // Separate selected and unselected contributors
-  const selectedContributorsList = sortedContributors.filter(contributor => 
-    selectedContributors.includes(contributor.id)
-  );
-  const unselectedContributorsList = sortedContributors.filter(contributor => 
-    !selectedContributors.includes(contributor.id)
-  );
-  
-  // Combine with selected first
-  const organizedContributors = [...selectedContributorsList, ...unselectedContributorsList];
-  
-  const displayedContributors = organizedContributors.slice(0, displayedContributorsCount);
-  const hasMoreContributors = displayedContributorsCount < organizedContributors.length;
+  // Memoized filtered and sorted contributors to avoid recalculation on every render
+  const filteredAndSortedContributors = useMemo(() => {
+    const filtered = contributors.filter(contributor =>
+      contributor.name.toLowerCase().includes(contributorSearch.toLowerCase())
+    );
+    
+    // Sort alphabetically
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  }, [contributors, contributorSearch]);
 
-  const handleContributorSearchChange = (event) => {
-    setContributorSearch(event.target.value);
-    setDisplayedContributorsCount(CONTRIBUTORS_PER_PAGE); // Reset displayed count when searching
-  };
+  // Memoized displayed contributors for virtual scrolling
+  const displayedContributors = useMemo(() => {
+    return filteredAndSortedContributors.slice(0, displayedContributorsCount);
+  }, [filteredAndSortedContributors, displayedContributorsCount]);
 
-  const handleScroll = (event) => {
+  const hasMoreContributors = displayedContributorsCount < filteredAndSortedContributors.length;
+
+  const handleContributorListScroll = (event) => {
     const { scrollTop, scrollHeight, clientHeight } = event.target;
     
     // Load more when scrolled to bottom (with 50px threshold)
@@ -330,11 +464,11 @@ function CommitterAnalysis() {
 
   const handleContributorToggle = (contributorId) => {
     setSelectedContributors(prev => {
-      if (prev.includes(contributorId)) {
-        return prev.filter(id => id !== contributorId);
-      } else {
-        return [...prev, contributorId];
-      }
+      const updated = prev.includes(contributorId)
+        ? prev.filter(id => id !== contributorId)
+        : [...prev, contributorId];
+      setStoredState('selectedContributors', updated);
+      return updated;
     });
   };
 
@@ -345,175 +479,21 @@ function CommitterAnalysis() {
     }));
   };
 
-  const getTimeRangeLabel = (days) => {
-    switch (days) {
-      case 7: return 'Last 7 days';
-      case 30: return 'Last 30 days';
-      case 90: return 'Last 3 months';
-      case 365: return 'Year to date';
-      case 0: return 'Lifetime';
-      default: return `Last ${days} days`;
-    }
-  };
-
-  const getActivityGranularity = (days) => {
-    if (days === 0) return 'month'; // Lifetime
-    if (days === 365) return 'month'; // Year to date
-    if (days <= 7) return 'hour';
-    if (days <= 30) return 'day';
-    if (days <= 90) return 'week';
-    return 'month';
-  };
-
-  const getActivityAxisLabel = (days) => {
-    const granularity = getActivityGranularity(days);
-    console.log('Time range:', days, 'Granularity:', granularity);
-    switch (granularity) {
-      case 'hour': return 'Hour of Day';
-      case 'day': return 'Day';
-      case 'week': return 'Week';
-      case 'month': return 'Month';
-      default: return 'Time Period';
-    }
-  };
-
-  const formatActivityData = (contributorId) => {
-    const metrics = contributorMetrics[contributorId];
-    console.log('formatActivityData called for contributor:', contributorId, 'timeRange:', timeRange, 'metrics:', metrics);
-    
-    if (!metrics) {
-      console.log('No metrics for contributor:', contributorId);
-      return { labels: [], datasets: [] };
-    }
-    
-    const granularity = getActivityGranularity(timeRange);
-    console.log('Granularity for timeRange', timeRange, ':', granularity);
-    
-    // For hourly granularity, use activity_pattern (hour of day)
-    if (granularity === 'hour') {
-      if (!metrics.activity_pattern) {
-        console.log('No activity pattern for contributor:', contributorId);
-        return { labels: [], datasets: [] };
-      }
-      
-      const entries = Object.entries(metrics.activity_pattern);
-      console.log('Activity pattern entries:', entries);
-      
-      if (entries.length === 0) {
-        console.log('No entries in activity pattern');
-        return { labels: [], datasets: [] };
-      }
-      
-      // Sort by hour for proper display
-      entries.sort(([a], [b]) => parseInt(a) - parseInt(b));
-      
-      const result = {
-        labels: entries.map(([hour]) => `${hour}:00`),
-        datasets: [{
-          label: 'Commits',
-          data: entries.map(([, commits]) => commits),
-          backgroundColor: 'rgba(54, 162, 235, 0.2)',
-          borderColor: 'rgba(54, 162, 235, 1)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.1
-        }]
-      };
-      console.log('Hourly data result:', result);
-      return result;
-    } else {
-      // For other granularities, use activity_timeline (actual dates)
-      if (!metrics.activity_timeline || metrics.activity_timeline.length === 0) {
-        console.log('No activity timeline for contributor:', contributorId);
-        return { labels: [], datasets: [] };
-      }
-      
-      console.log('Activity timeline entries:', metrics.activity_timeline);
-      
-      // Sort timeline by date
-      const sortedTimeline = [...metrics.activity_timeline].sort((a, b) => new Date(a.date) - new Date(b.date));
-      
-      let labels = [];
-      let data = [];
-      
-      if (granularity === 'day') {
-        // Use actual daily data
-        labels = sortedTimeline.map(item => {
-          const date = new Date(item.date);
-          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        });
-        data = sortedTimeline.map(item => item.commits);
-      } else if (granularity === 'week') {
-        // Aggregate by week
-        const weeklyData = new Map();
-        sortedTimeline.forEach(item => {
-          const date = new Date(item.date);
-          const weekStart = new Date(date);
-          weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
-          const weekKey = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          
-          if (!weeklyData.has(weekKey)) {
-            weeklyData.set(weekKey, 0);
-          }
-          weeklyData.set(weekKey, weeklyData.get(weekKey) + item.commits);
-        });
-        
-        labels = Array.from(weeklyData.keys());
-        data = Array.from(weeklyData.values());
-      } else if (granularity === 'month') {
-        // Aggregate by month
-        const monthlyData = new Map();
-        sortedTimeline.forEach(item => {
-          const date = new Date(item.date);
-          const monthKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
-          
-          if (!monthlyData.has(monthKey)) {
-            monthlyData.set(monthKey, 0);
-          }
-          monthlyData.set(monthKey, monthlyData.get(monthKey) + item.commits);
-        });
-        
-        labels = Array.from(monthlyData.keys());
-        data = Array.from(monthlyData.values());
-      }
-      
-      const result = {
-        labels,
-        datasets: [{
-          label: 'Commits',
-          data,
-          backgroundColor: 'rgba(54, 162, 235, 0.2)',
-          borderColor: 'rgba(54, 162, 235, 1)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.1
-        }]
-      };
-      console.log('Timeline-based data result:', result);
-      return result;
-    }
-  };
-
-  const formatCommitTypeData = (contributorId) => {
-    const metrics = contributorMetrics[contributorId];
-    if (!metrics || !metrics.commit_types) return { labels: [], datasets: [] };
-    
-    const entries = Object.entries(metrics.commit_types);
-    return {
-      labels: entries.map(([type]) => type.charAt(0).toUpperCase() + type.slice(1)),
-      datasets: [{
-        data: entries.map(([, count]) => count),
-        backgroundColor: [
-          '#FF6384',
-          '#36A2EB', 
-          '#FFCE56',
-          '#4BC0C0',
-          '#9966FF',
-          '#FF9F40'
-        ],
-        borderWidth: 1
-      }]
-    };
+  const handleRepositoryChange = (event) => {
+    const repoId = event.target.value;
+    const repo = repositories.find(r => r.id === repoId);
+    setSelectedRepository(repo);
+    setStoredState('selectedRepository', repo);
+    setSelectedContributors([]);
+    setStoredState('selectedContributors', []);
+    setContributorMetrics({});
+    setStoredState('contributorMetrics', {});
+    setContributorTimelines({});
+    setStoredState('contributorTimelines', {});
+    setComparisonData([]);
+    setStoredState('comparisonData', []);
+    setFormSubmitted(false);
+    setStoredState('formSubmitted', false);
   };
 
   if (loading) {
@@ -524,210 +504,161 @@ function CommitterAnalysis() {
     );
   }
 
-  if (error) {
-    return (
-      <Alert severity="error" sx={{ mb: 2 }}>
-        {error}
-      </Alert>
-    );
-  }
-
   return (
-    <Box>
-      {/* Header Controls */}
+    <div>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Form Section */}
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-          <Typography 
-            variant={isMobile ? 'h6' : 'h5'} 
-            gutterBottom
-            sx={{ fontWeight: 600 }}
-          >
-            Committer Analysis
+          <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+            Committer Analysis Configuration
           </Typography>
           
+          <form onSubmit={handleFormSubmit}>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
+            <Grid item xs={12} sm={6} md={4} lg={3}>
+              <FormControl {...formStyles.formControl}>
                 <InputLabel>Select Repository</InputLabel>
                 <Select
                   value={selectedRepository?.id || ''}
-                  onChange={(e) => {
-                    const repo = repositories.find(r => r.id === e.target.value);
-                    setSelectedRepository(repo);
-                  }}
+                  onChange={handleRepositoryChange}
                   label="Select Repository"
                 >
                   {repositories.map((repo) => (
                     <MenuItem key={repo.id} value={repo.id}>
-                      <Box>
-                        <Typography variant="body2">{repo.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {repo.last_analyzed 
-                            ? `Last analyzed: ${new Date(repo.last_analyzed).toLocaleDateString()}`
-                            : 'Not analyzed yet'
-                          }
-                        </Typography>
-                      </Box>
+                      {repo.name}
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             </Grid>
             
-            <Grid item xs={12} sm={6} md={4}>
-              <FormControl fullWidth disabled={!selectedRepository}>
+            <Grid item xs={12} sm={6} md={4} lg={4}>
+              <FormControl {...formStyles.formControl} disabled={!selectedRepository}>
                 <ClickAwayListener onClickAway={() => {
                   setDropdownOpen(false);
                   setAnchorEl(null);
                 }}>
                   <Box>
                     <TextField
+                      fullWidth
                       label="Select Contributors"
-                      value={selectedContributors.length > 0 ? `${selectedContributors.length} contributors selected` : ""}
-                      onClick={(event) => {
-                        setAnchorEl(event.currentTarget);
+                      value={selectedContributors.length > 0 ? `${selectedContributors.length} selected` : ''}
+                      onClick={(e) => {
+                        if (!selectedRepository) return;
+                        setAnchorEl(e.currentTarget);
                         setDropdownOpen(!dropdownOpen);
                       }}
                       InputProps={{
                         readOnly: true,
                         endAdornment: (
                           <InputAdornment position="end">
-                            <IconButton size="small">
-                              {dropdownOpen ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                            <IconButton
+                              onClick={(e) => {
+                                if (!selectedRepository) return;
+                                setAnchorEl(e.currentTarget);
+                                setDropdownOpen(!dropdownOpen);
+                              }}
+                              disabled={!selectedRepository}
+                            >
+                              <KeyboardArrowDownIcon />
                             </IconButton>
                           </InputAdornment>
                         )
                       }}
-                      placeholder={selectedContributors.length === 0 ? "Click to select contributors" : ""}
-                      sx={{ cursor: 'pointer' }}
+                      sx={{
+                        cursor: selectedRepository ? 'pointer' : 'default',
+                        '& .MuiInputBase-input': {
+                          cursor: selectedRepository ? 'pointer' : 'default'
+                        }
+                      }}
                     />
-                    
-                    <Popper
-                      open={dropdownOpen}
+
+                    <Popper 
+                      open={dropdownOpen && Boolean(anchorEl)} 
                       anchorEl={anchorEl}
                       placement="bottom-start"
-                      style={{ zIndex: 1300, width: anchorEl ? anchorEl.offsetWidth : 400 }}
+                      style={{ zIndex: 1300, width: anchorEl?.offsetWidth || 'auto' }}
                     >
-                      <Paper sx={{ mt: 1, maxHeight: 400, overflow: 'hidden' }}>
-                        {/* Search Field */}
-                        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                      <Paper 
+                        elevation={8}
+                        sx={{ 
+                          maxHeight: 300, 
+                          overflow: 'hidden',
+                          border: '1px solid',
+                          borderColor: 'divider'
+                        }}
+                      >
+                        <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
                           <TextField
-                            fullWidth
                             size="small"
                             placeholder="Search contributors..."
                             value={contributorSearch}
-                            onChange={handleContributorSearchChange}
+                            onChange={(e) => {
+                              setContributorSearch(e.target.value);
+                              setDisplayedContributorsCount(CONTRIBUTORS_PER_PAGE); // Reset pagination
+                            }}
                             InputProps={{
                               startAdornment: (
                                 <InputAdornment position="start">
-                                  <SearchIcon />
+                                  <SearchIcon fontSize="small" />
                                 </InputAdornment>
-                              ),
+                              )
                             }}
+                            sx={{ width: '100%' }}
                           />
                         </Box>
-
-                        {/* Contributors List with Infinite Scroll */}
+                        
                         <List 
+                          dense 
                           sx={{ 
-                            maxHeight: 280, 
+                            maxHeight: 200, 
                             overflow: 'auto',
-                            '&::-webkit-scrollbar': {
-                              width: '6px',
-                            },
-                            '&::-webkit-scrollbar-track': {
-                              background: '#f1f1f1',
-                              borderRadius: '3px',
-                            },
-                            '&::-webkit-scrollbar-thumb': {
-                              background: '#c1c1c1',
-                              borderRadius: '3px',
-                            },
-                            '&::-webkit-scrollbar-thumb:hover': {
-                              background: '#a8a8a8',
-                            },
+                            py: 0
                           }}
-                          onScroll={handleScroll}
+                          onScroll={handleContributorListScroll}
                         >
-                          {displayedContributors.map((contributor) => {
-                            const isSelected = selectedContributors.includes(contributor.id);
-                            return (
-                              <ListItem
-                                key={contributor.id}
-                                button
-                                onClick={() => {
-                                  const newSelected = isSelected
-                                    ? selectedContributors.filter(id => id !== contributor.id)
-                                    : [...selectedContributors, contributor.id];
-                                  setSelectedContributors(newSelected);
-                                }}
-                                sx={{
-                                  backgroundColor: isSelected ? 'primary.light' : 'transparent',
-                                  '&:hover': {
-                                    backgroundColor: isSelected ? 'primary.main' : 'action.hover',
-                                  },
-                                  opacity: isSelected ? 1 : 0.8,
-                                  borderLeft: isSelected ? '3px solid' : 'none',
-                                  borderLeftColor: 'primary.main'
-                                }}
+                          {displayedContributors.map((contributor) => (
+                            <ListItem key={contributor.id} disablePadding>
+                              <ListItemButton
+                                onClick={() => handleContributorToggle(contributor.id)}
+                                dense
                               >
                                 <Checkbox
-                                  checked={isSelected}
+                                  edge="start"
+                                  checked={selectedContributors.includes(contributor.id)}
                                   tabIndex={-1}
                                   disableRipple
-                                  color="primary"
+                                  size="small"
                                 />
                                 <ListItemText 
                                   primary={contributor.name}
-                                  sx={{
-                                    '& .MuiListItemText-primary': {
-                                      fontWeight: isSelected ? 600 : 400,
-                                      color: isSelected ? 'primary.contrastText' : 'text.primary'
-                                    }
-                                  }}
+                                  secondary={contributor.email}
+                                  primaryTypographyProps={{ fontSize: '0.875rem' }}
+                                  secondaryTypographyProps={{ fontSize: '0.75rem' }}
                                 />
-                              </ListItem>
-                            );
-                          })}
-                          
-                          {/* Loading indicator when more items are being loaded */}
-                          {hasMoreContributors && (
-                            <ListItem sx={{ justifyContent: 'center', py: 2 }}>
-                              <CircularProgress size={20} />
-                              <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
-                                Loading more contributors...
-                              </Typography>
+                              </ListItemButton>
                             </ListItem>
-                          )}
+                          ))}
                           
-                          {filteredContributors.length === 0 && (
+                          {hasMoreContributors && (
                             <ListItem>
                               <ListItemText 
-                                primary="No contributors found"
-                                sx={{ textAlign: 'center', color: 'text.secondary' }}
+                                primary={`Showing ${displayedContributors.length} of ${filteredAndSortedContributors.length} contributors`}
+                                primaryTypographyProps={{ 
+                                  fontSize: '0.75rem', 
+                                  color: 'text.secondary',
+                                  textAlign: 'center'
+                                }}
                               />
                             </ListItem>
                           )}
-                          
-                          {/* End of list indicator */}
-                          {!hasMoreContributors && filteredContributors.length > CONTRIBUTORS_PER_PAGE && (
-                            <ListItem sx={{ justifyContent: 'center', py: 1 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                All contributors loaded
-                              </Typography>
-                            </ListItem>
-                          )}
                         </List>
-
-                        {/* Footer with selection info */}
-                        <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'grey.50' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            {selectedContributors.length} of {contributors.length} contributors selected
-                            {filteredContributors.length !== contributors.length && 
-                              ` • ${filteredContributors.length} shown`
-                            }
-                          </Typography>
-                        </Box>
                       </Paper>
                     </Popper>
                   </Box>
@@ -735,23 +666,61 @@ function CommitterAnalysis() {
               </FormControl>
             </Grid>
             
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth disabled={!selectedRepository}>
+            <Grid item xs={12} sm={6} md={3} lg={3}>
+              <FormControl {...formStyles.formControl} disabled={!selectedRepository}>
                 <InputLabel>Time Range</InputLabel>
                 <Select
                   value={timeRange}
-                  onChange={(e) => setTimeRange(e.target.value)}
+                  onChange={(e) => {
+                    setTimeRange(e.target.value);
+                    setStoredState('timeRange', e.target.value);
+                  }}
                   label="Time Range"
                 >
                   <MenuItem value={7}>Last 7 days</MenuItem>
                   <MenuItem value={30}>Last 30 days</MenuItem>
-                  <MenuItem value={90}>Last 3 months</MenuItem>
+                  <MenuItem value={90}>Last 90 days</MenuItem>
                   <MenuItem value={365}>Year to date</MenuItem>
-                  <MenuItem value={0}>All time</MenuItem>
+                  <MenuItem value={730}>Last year</MenuItem>
+                  <MenuItem value={0}>Lifetime</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
+            
+            <Grid item xs={12} sm={6} md={1} lg={2}>
+              <Button
+                type="submit"
+                {...formStyles.button.primary}
+                disabled={!selectedRepository || selectedContributors.length === 0 || isAnalyzing}
+              >
+                {isAnalyzing ? 'Analyzing...' : 'Start Analysis'}
+              </Button>
+            </Grid>
           </Grid>
+          </form>
+
+          {/* Selected Contributors Display */}
+          {selectedContributors.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Selected Contributors ({selectedContributors.length}):
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {selectedContributors.map((contributorId) => {
+                  const contributor = contributors.find(c => c.id === contributorId);
+                  return contributor ? (
+                    <Chip
+                      key={contributorId}
+                      label={contributor.name}
+                      onDelete={() => handleContributorRemove(contributorId)}
+                      size="small"
+                      variant="outlined"
+                    />
+                  ) : null;
+                })}
+              </Box>
+            </Box>
+          )}
         </CardContent>
       </Card>
 
@@ -779,15 +748,40 @@ function CommitterAnalysis() {
             </Typography>
           </CardContent>
         </Card>
+      ) : !formSubmitted ? (
+        <Card>
+          <CardContent sx={{ textAlign: 'center', py: 8 }}>
+            <TrendingUpIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+            <Typography variant="h6" gutterBottom>
+              Ready to Analyze
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Click the "Analyze" button to generate detailed metrics and performance analysis for the selected contributors.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              onClick={handleFormSubmit}
+              disabled={isAnalyzing}
+              startIcon={isAnalyzing ? <CircularProgress size={20} /> : <TrendingUpIcon />}
+            >
+              {isAnalyzing ? 'Analyzing...' : 'Start Analysis'}
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {/* Tabs for different views */}
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
             <Tabs 
               value={tabValue} 
-              onChange={(e, newValue) => setTabValue(newValue)}
-              variant={isMobile ? "scrollable" : "standard"}
-              scrollButtons={isMobile ? "auto" : false}
+              onChange={(e, newValue) => {
+                setTabValue(newValue);
+                setStoredState('tabValue', newValue);
+              }}
+              variant={isTablet ? "scrollable" : "standard"}
+              scrollButtons={isTablet ? "auto" : false}
             >
               <Tab 
                 label={isMobile ? "Overview" : "Overview"} 
@@ -795,13 +789,13 @@ function CommitterAnalysis() {
                 iconPosition="start"
               />
               <Tab 
-                label={isMobile ? "Compare" : "Comparison"} 
+                label={isMobile ? "Compare" : isTablet ? "Compare" : "Comparison"} 
                 icon={<CompareIcon />} 
                 iconPosition="start"
                 disabled={selectedContributors.length < 2}
               />
               <Tab 
-                label={isMobile ? "Activity" : "Activity Patterns"} 
+                label={isMobile ? "Activity" : isTablet ? "Patterns" : "Activity Patterns"} 
                 icon={<TimelineIcon />} 
                 iconPosition="start"
               />
@@ -814,7 +808,12 @@ function CommitterAnalysis() {
               const metrics = contributorMetrics[contributorId];
               const contributor = contributors.find(c => c.id === contributorId);
               
-              if (!metrics || !contributor) return null;
+              if (!metrics || !contributor) {
+                console.log(`Missing data for contributor ${contributorId}:`, { metrics, contributor });
+                return null;
+              }
+              
+              console.log(`Rendering metrics for ${contributor.name}:`, metrics);
 
               return (
                 <Card key={contributorId} sx={{ mb: 3 }}>
@@ -845,40 +844,44 @@ function CommitterAnalysis() {
 
                     {/* Key Metrics Grid */}
                     <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid item xs={6} sm={3}>
+                      <Grid item xs={6} sm={6} md={3}>
                         <MetricCard
                           title="Commits"
-                          value={metrics.total_commits}
-                          subtitle={`${metrics.commit_velocity} per day`}
+                          value={metrics.total_commits || 0}
+                          subtitle={`${metrics.commit_velocity || 0} per day`}
                           icon={<CodeIcon />}
                           color="primary"
+                          tooltipKey="total_commits"
                         />
                       </Grid>
-                      <Grid item xs={6} sm={3}>
+                      <Grid item xs={6} sm={6} md={3}>
                         <MetricCard
                           title="Lines Added"
-                          value={metrics.lines_added.toLocaleString()}
-                          subtitle={`${metrics.code_churn_ratio}x churn ratio`}
+                          value={(metrics.lines_added || 0).toLocaleString()}
+                          subtitle={`${metrics.code_churn_ratio || 0}x churn ratio`}
                           icon={<TrendingUpIcon />}
                           color="success"
+                          tooltipKey="lines_added"
                         />
                       </Grid>
-                      <Grid item xs={6} sm={3}>
+                      <Grid item xs={6} sm={6} md={3}>
                         <MetricCard
                           title="Files Modified"
-                          value={metrics.files_modified}
-                          subtitle={`${metrics.avg_files_per_commit} avg per commit`}
+                          value={metrics.files_modified || 0}
+                          subtitle={`${metrics.avg_files_per_commit || 0} avg per commit`}
                           icon={<PersonIcon />}
                           color="warning"
+                          tooltipKey="files_modified"
                         />
                       </Grid>
-                      <Grid item xs={6} sm={3}>
+                      <Grid item xs={6} sm={6} md={3}>
                         <MetricCard
                           title="Lines Deleted"
-                          value={metrics.lines_deleted.toLocaleString()}
+                          value={(metrics.lines_deleted || 0).toLocaleString()}
                           subtitle="Code cleanup"
                           icon={<ScheduleIcon />}
                           color="error"
+                          tooltipKey="lines_deleted"
                         />
                       </Grid>
                     </Grid>
@@ -889,48 +892,62 @@ function CommitterAnalysis() {
                       
                       <Grid container spacing={3}>
                         {/* Commit Types Chart */}
-                        <Grid item xs={12} md={6}>
-                          <Paper sx={{ p: 2, height: 300 }}>
+                        <Grid item xs={12} sm={12} md={6}>
+                          <Paper sx={{ p: 2, height: { xs: 250, sm: 280, md: 300 } }}>
                             <Typography variant="h6" gutterBottom>
                               Commit Types
                             </Typography>
                             <Box sx={{ height: 250, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                              <Pie 
-                                data={formatCommitTypeData(contributorId)}
-                                options={{
-                                  responsive: true,
-                                  maintainAspectRatio: false,
-                                  plugins: {
-                                    legend: {
-                                      position: 'bottom'
-                                    },
-                                    tooltip: {
-                                      callbacks: {
-                                        label: (context) => {
-                                          const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                          const percentage = ((context.raw / total) * 100).toFixed(1);
-                                          return `${context.label}: ${context.raw} (${percentage}%)`;
+                              {(() => {
+                                const commitTypeData = formatCommitTypeData(metrics.commit_types);
+                                return commitTypeData.labels.length > 0 ? (
+                                  <Pie 
+                                    data={commitTypeData}
+                                    options={{
+                                      responsive: true,
+                                      maintainAspectRatio: false,
+                                      plugins: {
+                                        legend: {
+                                          position: 'bottom'
+                                        },
+                                        tooltip: {
+                                          callbacks: {
+                                            label: (context) => {
+                                              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                              const percentage = ((context.raw / total) * 100).toFixed(1);
+                                              return `${context.label}: ${context.raw} (${percentage}%)`;
+                                            }
+                                          }
                                         }
                                       }
-                                    }
-                                  }
-                                }}
-                              />
+                                    }}
+                                  />
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary">
+                                    No commit type data available
+                                  </Typography>
+                                );
+                              })()} 
                             </Box>
                           </Paper>
                         </Grid>
 
                         {/* Activity Pattern */}
-                        <Grid item xs={12} md={6}>
-                          <Paper sx={{ p: 2, height: 300 }}>
+                        <Grid item xs={12} sm={12} md={6}>
+                          <Paper sx={{ p: 2, height: { xs: 250, sm: 280, md: 300 } }}>
                             <Typography variant="h6" gutterBottom>
                               Activity by Hour
                             </Typography>
                             <Box sx={{ height: 250 }}>
-                              <Bar 
-                                key={`bar-${contributorId}-${timeRange}`}
-                                data={formatActivityData(contributorId)}
-                                options={{
+                              {(() => {
+                                const timeline = contributorTimelines[contributorId] || [];
+                                const granularity = getActivityGranularity(timeRange);
+                                const activityData = formatActivityData(timeline, granularity);
+                                return (
+                                  <Line 
+                                    key={`line-${contributorId}-${timeRange}`}
+                                    data={activityData}
+                                    options={{
                                   responsive: true,
                                   maintainAspectRatio: false,
                                   plugins: {
@@ -963,7 +980,9 @@ function CommitterAnalysis() {
                                     }
                                   }
                                 }}
-                              />
+                                  />
+                                );
+                              })()} 
                             </Box>
                           </Paper>
                         </Grid>
@@ -1132,7 +1151,7 @@ function CommitterAnalysis() {
                 if (!metrics || !contributor) return null;
 
                 return (
-                  <Grid item xs={12} lg={6} key={contributorId}>
+                  <Grid item xs={12} sm={12} md={6} lg={6} key={contributorId}>
                     <Card>
                       <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
                         <Box display="flex" alignItems="center" mb={2}>
@@ -1144,12 +1163,16 @@ function CommitterAnalysis() {
                           </Typography>
                         </Box>
                         
-                        <Box sx={{ height: 300 }}>
-                          {formatActivityData(contributorId).labels.length > 0 ? (
-                            <Line 
-                              key={`line-${contributorId}-${timeRange}`}
-                              data={formatActivityData(contributorId)}
-                              options={{
+                        <Box sx={{ height: { xs: 250, sm: 280, md: 300 } }}>
+                          {(() => {
+                            const timeline = contributorTimelines[contributorId] || [];
+                            const granularity = getActivityGranularity(timeRange);
+                            const activityData = formatActivityData(timeline, granularity);
+                            return activityData.labels.length > 0 ? (
+                              <Line 
+                                key={`line-${contributorId}-${timeRange}`}
+                                data={activityData}
+                                options={{
                                 responsive: true,
                                 maintainAspectRatio: false,
                                 plugins: {
@@ -1182,22 +1205,23 @@ function CommitterAnalysis() {
                                   }
                                 }
                               }}
-                            />
-                          ) : (
-                            <Box 
-                              sx={{ 
-                                height: '100%', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                color: 'text.secondary'
-                              }}
-                            >
-                              <Typography variant="body2">
-                                No activity pattern data available
-                              </Typography>
-                            </Box>
-                          )}
+                              />
+                            ) : (
+                              <Box 
+                                sx={{ 
+                                  height: '100%', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  color: 'text.secondary'
+                                }}
+                              >
+                                <Typography variant="body2">
+                                  No activity pattern data available
+                                </Typography>
+                              </Box>
+                            );
+                          })()} 
                         </Box>
                       </CardContent>
                     </Card>
@@ -1208,7 +1232,7 @@ function CommitterAnalysis() {
           </TabPanel>
         </>
       )}
-    </Box>
+    </div>
   );
 }
 

@@ -24,6 +24,7 @@ import Dashboard from './components/Dashboard';
 import RepositoryManager from './components/RepositoryManager';
 import CommitterAnalysis from './components/CommitterAnalysis';
 import Logo from './components/Logo';
+import { formStyles } from './theme/formStyles';
 import './App.css';
 
 const theme = createTheme({
@@ -38,8 +39,26 @@ const theme = createTheme({
 });
 
 function App() {
+  // Persistent state management
+  const getStoredState = (key, defaultValue) => {
+    try {
+      const stored = localStorage.getItem(`app_${key}`);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  const setStoredState = (key, value) => {
+    try {
+      localStorage.setItem(`app_${key}`, JSON.stringify(value));
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
   const [repositories, setRepositories] = useState([]);
-  const [selectedRepo, setSelectedRepo] = useState(null);
+  const [selectedRepo, setSelectedRepo] = useState(() => getStoredState('selectedRepo', null));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const location = useLocation();
@@ -54,8 +73,22 @@ function App() {
       if (!response.ok) throw new Error('Failed to fetch repositories');
       const data = await response.json();
       setRepositories(data);
-      if (data.length > 0 && !selectedRepo) {
+      
+      // Restore selected repo from storage or default to first
+      const storedRepo = getStoredState('selectedRepo', null);
+      if (storedRepo) {
+        // Find the stored repo in the current list
+        const foundRepo = data.find(r => r.id === storedRepo.id);
+        if (foundRepo) {
+          setSelectedRepo(foundRepo);
+        } else if (data.length > 0) {
+          // Fallback to first repo if stored repo not found
+          setSelectedRepo(data[0]);
+          setStoredState('selectedRepo', data[0]);
+        }
+      } else if (data.length > 0 && !selectedRepo) {
         setSelectedRepo(data[0]);
+        setStoredState('selectedRepo', data[0]);
       }
       setLoading(false);
     } catch (err) {
@@ -66,6 +99,11 @@ function App() {
 
   const handleRepoAdded = () => {
     fetchRepositories();
+  };
+
+  const handleRepositoryChange = (repo) => {
+    setSelectedRepo(repo);
+    setStoredState('selectedRepo', repo);
   };
 
   if (loading) {
@@ -168,51 +206,12 @@ function App() {
           <Routes>
             <Route path="/" element={
               <>
-                {repositories.length > 0 && (
-                  <Card sx={{ mb: { xs: 2, sm: 3 } }}>
-                    <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                      <Grid container spacing={{ xs: 2, sm: 2 }} alignItems="center">
-                        <Grid item xs={12} sm={6}>
-                          <FormControl fullWidth>
-                            <InputLabel>Select Repository</InputLabel>
-                            <Select
-                              value={selectedRepo?.id || ''}
-                              onChange={(e) => {
-                                const repo = repositories.find(r => r.id === e.target.value);
-                                setSelectedRepo(repo);
-                              }}
-                              label="Select Repository"
-                            >
-                              {repositories.map((repo) => (
-                                <MenuItem key={repo.id} value={repo.id}>
-                                  {repo.name}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                          <Typography 
-                            variant="body2" 
-                            color="text.secondary"
-                            sx={{ 
-                              fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                              textAlign: { xs: 'center', sm: 'left' }
-                            }}
-                          >
-                            {selectedRepo?.last_analyzed 
-                              ? `Last analyzed: ${new Date(selectedRepo.last_analyzed).toLocaleString()}`
-                              : 'Not analyzed yet'
-                            }
-                          </Typography>
-                        </Grid>
-                      </Grid>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {selectedRepo ? (
-                  <Dashboard repository={selectedRepo} />
+                {repositories.length > 0 ? (
+                  <Dashboard 
+                    repositories={repositories}
+                    selectedRepository={selectedRepo}
+                    onRepositoryChange={handleRepositoryChange}
+                  />
                 ) : (
                   <Card>
                     <CardContent sx={{ 

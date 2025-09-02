@@ -35,6 +35,17 @@ const PullProgressDialog = ({ open, onClose, onComplete, repositoryName }) => {
       });
       setSocket(newSocket);
 
+      // Set a timeout to handle cases where WebSocket events aren't received
+      const timeoutId = setTimeout(() => {
+        if (!isComplete && !error) {
+          setError('Pull operation timed out. Please check your network connection and try again.');
+          setIsComplete(true);
+          setTimeout(() => {
+            newSocket.disconnect();
+          }, 1000);
+        }
+      }, 30000); // 30 second timeout
+
       newSocket.on('connect', () => {
         console.log('WebSocket connected for pull operation');
         setProgress(10);
@@ -44,10 +55,14 @@ const PullProgressDialog = ({ open, onClose, onComplete, repositoryName }) => {
 
       newSocket.on('disconnect', (reason) => {
         console.log('WebSocket disconnected:', reason);
+        clearTimeout(timeoutId);
       });
 
       newSocket.on('connect_error', (error) => {
         console.error('WebSocket connection error:', error);
+        setError('Failed to connect to server. Please check your connection and try again.');
+        setIsComplete(true);
+        clearTimeout(timeoutId);
       });
 
       // Listen for pull events
@@ -67,6 +82,7 @@ const PullProgressDialog = ({ open, onClose, onComplete, repositoryName }) => {
 
       newSocket.on('pull_completed', (data) => {
         console.log('Pull completed:', data);
+        clearTimeout(timeoutId);
         if (data.success) {
           setProgress(100);
           setStage('Completed');
@@ -86,8 +102,20 @@ const PullProgressDialog = ({ open, onClose, onComplete, repositoryName }) => {
         }
       });
 
+      // Handle pull errors specifically
+      newSocket.on('pull_error', (data) => {
+        console.log('Pull error received:', data);
+        clearTimeout(timeoutId);
+        setError(data.error || 'Pull operation failed due to an unknown error');
+        setIsComplete(true);
+        setTimeout(() => {
+          newSocket.disconnect();
+        }, 1000);
+      });
+
       return () => {
         console.log('Cleaning up WebSocket connection...');
+        clearTimeout(timeoutId);
         if (newSocket.connected) {
           newSocket.disconnect();
         }
