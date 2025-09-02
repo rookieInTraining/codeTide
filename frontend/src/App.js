@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import Dashboard from './components/Dashboard';
 import RepositoryManager from './components/RepositoryManager';
+import CommitterAnalysis from './components/CommitterAnalysis';
 import Logo from './components/Logo';
 import './App.css';
 
@@ -117,6 +118,24 @@ function App() {
               </Box>
               <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
                 Dash
+              </Box>
+            </Button>
+            <Button 
+              color="inherit" 
+              component={Link}
+              to="/committers"
+              sx={{ 
+                mr: { xs: 1, sm: 2 },
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                px: { xs: 1, sm: 2 }
+              }}
+              variant={location.pathname === '/committers' ? 'outlined' : 'text'}
+            >
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Committers
+              </Box>
+              <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                Team
               </Box>
             </Button>
             <Button 
@@ -239,6 +258,7 @@ function App() {
                 )}
               </>
             } />
+            <Route path="/committers" element={<CommitterAnalysis />} />
             <Route path="/repositories" element={
               <RepositoryManager 
                 repositories={repositories}
