@@ -1,6 +1,7 @@
 import git
 import os
 import shutil
+import time
 from datetime import datetime
 from models import Commit, Contributor, CommitFile, Repository
 from sqlalchemy.orm import sessionmaker
@@ -13,46 +14,53 @@ class CloneProgress(RemoteProgress):
         super().__init__()
         self.socketio = socketio
         self.current_stage = 'Initializing'
+        self.last_update_time = time.time()
+        self.idle_timeout = 300  # 5 minutes idle timeout
         
     def update(self, op_code, cur_count, max_count=None, message=''):
-        print(f"Progress update: op_code={op_code}, cur_count={cur_count}, max_count={max_count}, message='{message}'")
+        """Update progress and emit to frontend via socketio"""
+        # Update last activity time
+        self.last_update_time = time.time()
         
-        if self.socketio:
-            # Determine the current stage
-            stage_name = 'Processing'
-            if op_code & self.COUNTING:
-                stage_name = 'Counting objects'
-            elif op_code & self.COMPRESSING:
-                stage_name = 'Compressing objects'
-            elif op_code & self.RECEIVING:
-                stage_name = 'Receiving objects'
-            elif op_code & self.RESOLVING:
-                stage_name = 'Resolving deltas'
-            elif op_code & self.CHECKING_OUT:
-                stage_name = 'Checking out files'
-            elif op_code & self.WRITING:
-                stage_name = 'Writing objects'
+        if not self.socketio:
+            return
             
-            self.current_stage = stage_name
+        # Map git operation codes to readable stages
+        stage_map = {
+            self.COUNTING: 'Counting objects',
+            self.COMPRESSING: 'Compressing objects', 
+            self.WRITING: 'Writing objects',
+            self.RECEIVING: 'Receiving objects',
+            self.RESOLVING: 'Resolving deltas'
+        }
+        
+        stage_name = stage_map.get(op_code & self.OP_MASK, 'Processing')
+        
+        # Calculate progress percentage (20% base + 80% for actual progress)
+        if max_count and max_count > 0:
+            progress = 20 + int((cur_count / max_count) * 80)
+        else:
+            # Fallback calculation when max_count is not available
+            progress = min(20 + (cur_count % 100), 95)
             
-            # Calculate progress percentage
-            progress = 20  # Default minimum progress
-            if max_count and max_count > 0 and cur_count > 0:
-                progress = min(95, max(20, int((cur_count / max_count) * 80) + 20))
-            elif cur_count > 0:
-                # If no max_count, use cur_count as indicator
-                progress = min(80, 20 + (cur_count % 60))
-            
-            print(f"Emitting progress: stage={stage_name}, progress={progress}%")
-            
-            # Emit progress update
-            self.socketio.emit('clone_progress', {
-                'stage': stage_name,
-                'progress': progress,
-                'current': cur_count,
-                'total': max_count,
-                'message': message or stage_name
-            })
+        print(f"Progress update: op_code={op_code}, cur_count={cur_count}, max_count={max_count}, message='{message}'")
+        print(f"Emitting progress: stage={stage_name}, progress={progress}%")
+        
+        # Store last progress for idle monitoring
+        self.last_progress = progress
+        
+        # Emit progress update
+        self.socketio.emit('clone_progress', {
+            'stage': stage_name,
+            'progress': progress,
+            'current': cur_count,
+            'total': max_count,
+            'message': message or stage_name
+        })
+        
+    def check_idle_timeout(self):
+        """Check if operation has been idle for too long"""
+        return time.time() - self.last_update_time > self.idle_timeout
 
 class GitAnalyzer:
     def __init__(self, session, socketio=None):
@@ -265,8 +273,28 @@ class GitAnalyzer:
             progress = CloneProgress(self.socketio) if self.socketio else None
             print(f"Created progress tracker: {progress is not None}")
             
-            # Clone the repository with progress tracking
+            # Clone the repository with progress tracking and idle monitoring
             print("Starting git clone...")
+            
+            # Start idle timeout monitoring in a separate thread
+            def monitor_idle_timeout():
+                while True:
+                    time.sleep(30)  # Check every 30 seconds
+                    if progress and progress.check_idle_timeout():
+                        print("Clone operation appears to be idle for too long")
+                        if self.socketio:
+                            self.socketio.emit('clone_progress', {
+                                'stage': 'Operation may be stuck',
+                                'progress': progress.last_progress if hasattr(progress, 'last_progress') else 50,
+                                'message': 'Clone operation has been idle for 5 minutes. This may indicate network issues.'
+                            })
+                        break
+            
+            if progress:
+                monitor_thread = threading.Thread(target=monitor_idle_timeout)
+                monitor_thread.daemon = True
+                monitor_thread.start()
+            
             repo = git.Repo.clone_from(git_url, local_path, progress=progress)
             print("Git clone completed successfully")
             
@@ -404,13 +432,31 @@ class GitAnalyzer:
                 lines_added = stats.total['insertions']
                 lines_deleted = stats.total['deletions']
                 
+                # Handle commit date conversion with validation
+                try:
+                    commit_timestamp = commit.committed_date
+                    commit_date = datetime.fromtimestamp(commit_timestamp)
+                    
+                    # Validate reasonable date range (1970-2100)
+                    if commit_date.year < 1970 or commit_date.year > 2100:
+                        print(f"Warning: Unusual commit date {commit_date} (timestamp: {commit_timestamp}) for commit {commit.hexsha[:8]}")
+                        # Use current time for obviously invalid dates
+                        if commit_date.year < 1970:
+                            commit_date = datetime.fromtimestamp(0)  # Unix epoch as fallback
+                        elif commit_date.year > 2100:
+                            commit_date = datetime.utcnow()
+                            
+                except (ValueError, OSError) as e:
+                    print(f"Error converting timestamp {commit.committed_date} for commit {commit.hexsha[:8]}: {e}")
+                    commit_date = datetime.utcnow()  # Use current time as fallback
+                
                 # Create commit record
                 commit_record = Commit(
                     sha=commit.hexsha,
                     repository_id=repository_id,
                     contributor_id=contributor.id,
                     message=commit.message.strip(),
-                    commit_date=datetime.fromtimestamp(commit.committed_date),
+                    commit_date=commit_date,
                     author_name=commit.author.name,
                     author_email=commit.author.email,
                     files_changed=files_changed,

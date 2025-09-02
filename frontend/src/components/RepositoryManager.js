@@ -25,7 +25,9 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  Box
+  Box,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import { Add as AddIcon, Refresh as RefreshIcon, Delete as DeleteIcon, GetApp as PullIcon } from '@mui/icons-material';
 import CloneProgressDialog from './CloneProgressDialog';
@@ -34,6 +36,9 @@ import PullProgressDialog from './PullProgressDialog';
 import AnalysisProgressDialog from './AnalysisProgressDialog';
 
 const RepositoryManager = ({ repositories, onRepoAdded }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({ 
     name: '', 
@@ -225,10 +230,10 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
       <Grid container spacing={{ xs: 2, sm: 3 }} alignItems="center" sx={{ mb: { xs: 2, sm: 3 } }}>
         <Grid item xs={12} sm>
           <Typography 
-            variant="h4"
+            variant={isMobile ? 'h5' : isTablet ? 'h4' : 'h4'}
             sx={{ 
-              fontSize: { xs: '1.5rem', sm: '2.125rem' },
-              fontWeight: { xs: 600, sm: 400 },
+              fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+              fontWeight: { xs: 600, sm: 500, md: 400 },
               textAlign: { xs: 'center', sm: 'left' }
             }}
           >
@@ -240,17 +245,20 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setOpen(true)}
-            sx={{
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-              px: { xs: 3, sm: 2 },
-              py: { xs: 1.5, sm: 1 }
+            sx={{ 
+              fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
+              px: { xs: 2, sm: 2.5, md: 3 },
+              py: { xs: 1.5, sm: 1.25, md: 1 }
             }}
           >
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
               Add Repository
             </Box>
-            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline', md: 'none' } }}>
               Add Repo
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              Add
             </Box>
           </Button>
         </Grid>
@@ -269,13 +277,13 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
       )}
 
       <Card>
-        <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+        <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
           <Typography 
             variant="h6" 
             gutterBottom
             sx={{ 
-              fontSize: { xs: '1.125rem', sm: '1.25rem' },
-              fontWeight: { xs: 600, sm: 500 }
+              fontSize: { xs: '1.125rem', sm: '1.2rem', md: '1.25rem' },
+              fontWeight: { xs: 600, sm: 550, md: 500 }
             }}
           >
             Tracked Repositories
@@ -287,19 +295,24 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
               color="text.secondary" 
               sx={{ 
                 textAlign: 'center', 
-                py: { xs: 3, sm: 4 },
-                fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                py: { xs: 3, sm: 3.5, md: 4 },
+                fontSize: { xs: '0.875rem', sm: '0.9rem', md: '0.875rem' }
               }}
             >
               No repositories added yet. Click "Add Repository" to get started.
             </Typography>
           ) : (
-            <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+            <Box sx={{ display: { xs: 'block', lg: 'none' } }}>
               {/* Mobile Card Layout */}
               {repositories.map((repo) => (
                 <Card key={repo.id} variant="outlined" sx={{ mb: 2 }}>
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                  <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+                    <Typography 
+                      variant={isMobile ? 'subtitle2' : 'subtitle1'} 
+                      fontWeight="bold" 
+                      gutterBottom
+                      sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}
+                    >
                       {repo.name}
                     </Typography>
                     
@@ -413,7 +426,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                         startIcon={<RefreshIcon />}
                         onClick={() => handleAnalyze(repo)}
                         disabled={loading}
-                        sx={{ fontSize: '0.75rem' }}
+                        sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem' } }}
                       >
                         Analyze
                       </Button>
@@ -424,7 +437,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                         startIcon={<PullIcon />}
                         onClick={() => handlePullClick(repo)}
                         disabled={loading}
-                        sx={{ fontSize: '0.75rem' }}
+                        sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem' } }}
                       >
                         Pull
                       </Button>
@@ -435,7 +448,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                         startIcon={<DeleteIcon />}
                         onClick={() => handleDeleteClick(repo)}
                         disabled={loading}
-                        sx={{ fontSize: '0.75rem' }}
+                        sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem' } }}
                       >
                         Delete
                       </Button>
@@ -448,7 +461,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
           
           {/* Desktop Table Layout */}
           {repositories.length > 0 && (
-            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+            <Box sx={{ display: { xs: 'none', lg: 'block' } }}>
               <TableContainer component={Paper} variant="outlined">
                 <Table>
                   <TableHead>
@@ -550,20 +563,20 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
         fullWidth
         PaperProps={{
           sx: { 
-            m: { xs: 1, sm: 2 },
-            maxHeight: { xs: '90vh', sm: 'none' }
+            m: { xs: 1, sm: 1.5, md: 2 },
+            maxHeight: { xs: '90vh', sm: '85vh', md: 'none' }
           }
         }}
       >
         <form onSubmit={handleSubmit}>
           <DialogTitle sx={{ 
-            fontSize: { xs: '1.125rem', sm: '1.25rem' },
-            px: { xs: 2, sm: 3 },
+            fontSize: { xs: '1.125rem', sm: '1.2rem', md: '1.25rem' },
+            px: { xs: 2, sm: 2.5, md: 3 },
             py: { xs: 2, sm: 2 }
           }}>
             Add New Repository
           </DialogTitle>
-          <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
+          <DialogContent sx={{ px: { xs: 2, sm: 2.5, md: 3 } }}>
             <Grid container spacing={{ xs: 2, sm: 2 }} sx={{ mt: 1 }}>
               <Grid item xs={12}>
                 <TextField
@@ -581,7 +594,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                 <FormControl component="fieldset">
                   <FormLabel 
                     component="legend"
-                    sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                    sx={{ fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' } }}
                   >
                     Repository Source
                   </FormLabel>
@@ -597,7 +610,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                       label="Local Repository"
                       sx={{ 
                         '& .MuiFormControlLabel-label': { 
-                          fontSize: { xs: '0.875rem', sm: '1rem' } 
+                          fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' } 
                         }
                       }}
                     />
@@ -607,7 +620,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                       label="Clone from URL"
                       sx={{ 
                         '& .MuiFormControlLabel-label': { 
-                          fontSize: { xs: '0.875rem', sm: '1rem' } 
+                          fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' } 
                         }
                       }}
                     />
@@ -657,14 +670,14 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                   </Grid>
                   <Grid item xs={12}>
                     <Box sx={{ 
-                      p: { xs: 1.5, sm: 2 }, 
+                      p: { xs: 1.5, sm: 1.75, md: 2 }, 
                       bgcolor: 'info.light', 
                       borderRadius: 1 
                     }}>
                       <Typography 
                         variant="body2" 
                         color="info.contrastText"
-                        sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                        sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
                       >
                         <strong>Note:</strong> The repository will be cloned to your local machine and then tracked for analysis.
                         {!formData.clone_to_path && " If no path is specified, it will be cloned to a 'repositories' folder in the current directory."}
@@ -676,7 +689,7 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
             </Grid>
           </DialogContent>
           <DialogActions sx={{ 
-            px: { xs: 2, sm: 3 }, 
+            px: { xs: 2, sm: 2.5, md: 3 }, 
             py: { xs: 2, sm: 2 },
             gap: { xs: 1, sm: 1 }
           }}>
@@ -702,11 +715,14 @@ const RepositoryManager = ({ repositories, onRepoAdded }) => {
                 <CircularProgress size={20} />
               ) : (
                 <>
-                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
                     {repoSource === 'remote' ? 'Clone & Add Repository' : 'Add Repository'}
                   </Box>
-                  <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline', md: 'none' } }}>
                     {repoSource === 'remote' ? 'Clone & Add' : 'Add Repo'}
+                  </Box>
+                  <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                    {repoSource === 'remote' ? 'Clone' : 'Add'}
                   </Box>
                 </>
               )}

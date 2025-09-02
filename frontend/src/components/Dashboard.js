@@ -11,7 +11,9 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import AnalysisProgressDialog from './AnalysisProgressDialog';
 import {
@@ -41,23 +43,55 @@ ChartJS.register(
 );
 
 const Dashboard = ({ repository }) => {
-  const [metrics, setMetrics] = useState({});
-  const [contributors, setContributors] = useState([]);
-  const [dailyActivity, setDailyActivity] = useState([]);
-  const [commitTypes, setCommitTypes] = useState({});
-  const [loading, setLoading] = useState(true);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Persistent state management
+  const getStoredState = (key, defaultValue) => {
+    try {
+      const stored = localStorage.getItem(`dashboard_${key}`);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  const setStoredState = (key, value) => {
+    try {
+      localStorage.setItem(`dashboard_${key}`, JSON.stringify(value));
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
+  const [metrics, setMetrics] = useState(() => getStoredState('metrics', {}));
+  const [contributors, setContributors] = useState(() => getStoredState('contributors', []));
+  const [dailyActivity, setDailyActivity] = useState(() => getStoredState('dailyActivity', []));
+  const [commitTypes, setCommitTypes] = useState(() => getStoredState('commitTypes', {}));
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [timePeriod, setTimePeriod] = useState(30);
+  const [timePeriod, setTimePeriod] = useState(() => getStoredState('timePeriod', 30));
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState({ open: false, repositoryName: '', repositoryId: null });
 
   useEffect(() => {
     if (repository) {
-      fetchAllData();
+      // Check if we have stored data to display immediately
+      const hasStoredData = getStoredState('metrics', null) && 
+                           getStoredState('contributors', null) && 
+                           getStoredState('dailyActivity', null) && 
+                           getStoredState('commitTypes', null);
+      
+      if (hasStoredData) {
+        setLoading(false);
+      }
     }
-  }, [repository, timePeriod]);
+  }, [repository]);
 
   const fetchAllData = async () => {
+    if (!repository) return;
+    
     setLoading(true);
     setError(null);
     
@@ -86,25 +120,30 @@ const Dashboard = ({ repository }) => {
     const churn = await churnRes.json();
     const testCoverage = await testCoverageRes.json();
 
-    setMetrics({ velocity, churn, testCoverage });
+    const metricsData = { velocity, churn, testCoverage };
+    setMetrics(metricsData);
+    setStoredState('metrics', metricsData);
   };
 
   const fetchContributors = async () => {
     const response = await fetch(`http://localhost:5000/api/metrics/contributors?repository_id=${repository.id}&days=${timePeriod}`);
     const data = await response.json();
     setContributors(data);
+    setStoredState('contributors', data);
   };
 
   const fetchDailyActivity = async () => {
     const response = await fetch(`http://localhost:5000/api/charts/daily-activity?repository_id=${repository.id}&days=${timePeriod}`);
     const data = await response.json();
     setDailyActivity(data);
+    setStoredState('dailyActivity', data);
   };
 
   const fetchCommitTypes = async () => {
     const response = await fetch(`http://localhost:5000/api/charts/commit-types?repository_id=${repository.id}&days=${timePeriod}`);
     const data = await response.json();
     setCommitTypes(data);
+    setStoredState('commitTypes', data);
   };
 
   const analyzeRepository = async () => {
@@ -119,6 +158,11 @@ const Dashboard = ({ repository }) => {
     setAnalysisProgress({ open: false, repositoryName: '', repositoryId: null });
     
     if (success) {
+      // Clear stored data to force fresh fetch
+      localStorage.removeItem('dashboard_metrics');
+      localStorage.removeItem('dashboard_contributors');
+      localStorage.removeItem('dashboard_dailyActivity');
+      localStorage.removeItem('dashboard_commitTypes');
       fetchAllData(); // Refresh all data after successful analysis
     }
   };
@@ -190,13 +234,16 @@ const Dashboard = ({ repository }) => {
         </Alert>
       )}
 
-      <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6}>
+      <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ mb: { xs: 2, sm: 2.5, md: 3 } }}>
+        <Grid item xs={12} sm={6} md={4}>
           <FormControl fullWidth>
             <InputLabel>Time Period</InputLabel>
             <Select
               value={timePeriod}
-              onChange={(e) => setTimePeriod(e.target.value)}
+              onChange={(e) => {
+                setTimePeriod(e.target.value);
+                setStoredState('timePeriod', e.target.value);
+              }}
               label="Time Period"
             >
               <MenuItem value={7}>Last 7 days</MenuItem>
@@ -208,24 +255,53 @@ const Dashboard = ({ repository }) => {
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={6}>
+        <Grid item xs={12} sm={6} md={8}>
           <Button
             variant="contained"
+            onClick={fetchAllData}
+            disabled={loading || analysisProgress.open}
+            fullWidth
+            sx={{ 
+              fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
+              py: { xs: 1.5, sm: 1.25, md: 1 }
+            }}
+          >
+            {loading ? (
+              <CircularProgress size={24} />
+            ) : (
+              <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
+                Load Dashboard Data
+              </Box>
+            )}
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline', md: 'none' } }}>
+              {loading ? <CircularProgress size={22} /> : 'Load Data'}
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              {loading ? <CircularProgress size={20} /> : 'Load'}
+            </Box>
+          </Button>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Button
+            variant="outlined"
             onClick={analyzeRepository}
             disabled={analysisProgress.open}
             fullWidth
             sx={{ 
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-              py: { xs: 1.5, sm: 1 }
+              fontSize: { xs: '0.875rem', sm: '0.9rem', md: '1rem' },
+              py: { xs: 1.5, sm: 1.25, md: 1 }
             }}
           >
             {analysisProgress.open ? (
               <CircularProgress size={24} />
             ) : (
-              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>
                 Analyze Repository
               </Box>
             )}
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline', md: 'none' } }}>
+              {analysisProgress.open ? <CircularProgress size={22} /> : 'Analyze Repo'}
+            </Box>
             <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
               {analysisProgress.open ? <CircularProgress size={20} /> : 'Analyze'}
             </Box>
@@ -234,19 +310,19 @@ const Dashboard = ({ repository }) => {
       </Grid>
 
       {/* Key Metrics */}
-      <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 4 }}>
-        <Grid item xs={6} sm={3}>
+      <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }} sx={{ mb: { xs: 3, sm: 3.5, md: 4 } }}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
             <CardContent sx={{ 
               textAlign: 'center',
-              py: { xs: 2, sm: 3 }
+              py: { xs: 2, sm: 2.5, md: 3 }
             }}>
               <Typography 
                 variant="h4" 
                 color="primary"
                 sx={{ 
-                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
-                  fontWeight: { xs: 600, sm: 400 }
+                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 500, md: 400 }
                 }}
               >
                 {metrics.velocity?.velocity?.toFixed(2) || '0'}
@@ -254,25 +330,25 @@ const Dashboard = ({ repository }) => {
               <Typography 
                 variant="body2" 
                 color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
               >
                 Commits/Day
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
             <CardContent sx={{ 
               textAlign: 'center',
-              py: { xs: 2, sm: 3 }
+              py: { xs: 2, sm: 2.5, md: 3 }
             }}>
               <Typography 
                 variant="h4" 
                 color="primary"
                 sx={{ 
-                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
-                  fontWeight: { xs: 600, sm: 400 }
+                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 500, md: 400 }
                 }}
               >
                 {metrics.churn?.churn_ratio?.toFixed(1) || '0'}
@@ -280,25 +356,25 @@ const Dashboard = ({ repository }) => {
               <Typography 
                 variant="body2" 
                 color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
               >
                 Code Churn Ratio
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
             <CardContent sx={{ 
               textAlign: 'center',
-              py: { xs: 2, sm: 3 }
+              py: { xs: 2, sm: 2.5, md: 3 }
             }}>
               <Typography 
                 variant="h4" 
                 color="primary"
                 sx={{ 
-                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
-                  fontWeight: { xs: 600, sm: 400 }
+                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 500, md: 400 }
                 }}
               >
                 {(metrics.testCoverage?.test_ratio * 100)?.toFixed(1) || '0'}%
@@ -306,25 +382,25 @@ const Dashboard = ({ repository }) => {
               <Typography 
                 variant="body2" 
                 color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
               >
                 Test File Ratio
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
             <CardContent sx={{ 
               textAlign: 'center',
-              py: { xs: 2, sm: 3 }
+              py: { xs: 2, sm: 2.5, md: 3 }
             }}>
               <Typography 
                 variant="h4" 
                 color="primary"
                 sx={{ 
-                  fontSize: { xs: '1.5rem', sm: '2.125rem' },
-                  fontWeight: { xs: 600, sm: 400 }
+                  fontSize: { xs: '1.5rem', sm: '1.75rem', md: '2.125rem' },
+                  fontWeight: { xs: 600, sm: 500, md: 400 }
                 }}
               >
                 {contributors.length}
@@ -332,7 +408,7 @@ const Dashboard = ({ repository }) => {
               <Typography 
                 variant="body2" 
                 color="text.secondary"
-                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem' } }}
               >
                 Active Contributors
               </Typography>
@@ -342,14 +418,14 @@ const Dashboard = ({ repository }) => {
       </Grid>
 
       {/* Charts */}
-      <Grid container spacing={{ xs: 2, sm: 3 }}>
-        <Grid item xs={12} lg={8}>
+      <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
+        <Grid item xs={12} md={8}>
           <Card>
-            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Typography 
                 variant="h6" 
                 gutterBottom
-                sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
               >
                 Daily Activity
               </Typography>
@@ -381,8 +457,8 @@ const Dashboard = ({ repository }) => {
                   color="text.secondary" 
                   sx={{ 
                     textAlign: 'center', 
-                    py: { xs: 2, sm: 4 },
-                    fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                    py: { xs: 2, sm: 3, md: 4 },
+                    fontSize: { xs: '0.875rem', sm: '0.9rem', md: '0.875rem' }
                   }}
                 >
                   No activity data available
@@ -391,13 +467,13 @@ const Dashboard = ({ repository }) => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} lg={4}>
+        <Grid item xs={12} md={4}>
           <Card>
-            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Typography 
                 variant="h6" 
                 gutterBottom
-                sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
               >
                 Commit Types
               </Typography>
@@ -409,8 +485,8 @@ const Dashboard = ({ repository }) => {
                   color="text.secondary" 
                   sx={{ 
                     textAlign: 'center', 
-                    py: { xs: 2, sm: 4 },
-                    fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                    py: { xs: 2, sm: 3, md: 4 },
+                    fontSize: { xs: '0.875rem', sm: '0.9rem', md: '0.875rem' }
                   }}
                 >
                   No commit type data available
@@ -421,11 +497,11 @@ const Dashboard = ({ repository }) => {
         </Grid>
         <Grid item xs={12}>
           <Card>
-            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <CardContent sx={{ p: { xs: 2, sm: 2.5, md: 3 } }}>
               <Typography 
                 variant="h6" 
                 gutterBottom
-                sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                sx={{ fontSize: { xs: '1rem', sm: '1.1rem', md: '1.25rem' } }}
               >
                 Top Contributors
               </Typography>
@@ -447,8 +523,8 @@ const Dashboard = ({ repository }) => {
                   color="text.secondary" 
                   sx={{ 
                     textAlign: 'center', 
-                    py: { xs: 2, sm: 4 },
-                    fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                    py: { xs: 2, sm: 3, md: 4 },
+                    fontSize: { xs: '0.875rem', sm: '0.9rem', md: '0.875rem' }
                   }}
                 >
                   No contributor data available

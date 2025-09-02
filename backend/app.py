@@ -330,6 +330,84 @@ def update_contributor(contributor_id):
         'experience_level': contributor.experience_level
     })
 
+@app.route('/api/contributors', methods=['GET'])
+def get_contributors():
+    """Get all contributors for a repository"""
+    repo_id = request.args.get('repository_id', type=int)
+    
+    if not repo_id:
+        return jsonify({'error': 'repository_id is required'}), 400
+    
+    # Get contributors who have commits in this repository
+    contributors = session.query(Contributor).join(
+        Commit, Commit.contributor_id == Contributor.id
+    ).filter(
+        Commit.repository_id == repo_id
+    ).distinct().all()
+    
+    return jsonify([{
+        'id': contributor.id,
+        'name': contributor.name,
+        'email': contributor.email,
+        'role': contributor.role,
+        'team': contributor.team,
+        'experience_level': contributor.experience_level
+    } for contributor in contributors])
+
+@app.route('/api/contributors/<int:contributor_id>/metrics', methods=['GET'])
+def get_contributor_detailed_metrics(contributor_id):
+    """Get detailed metrics for a specific contributor"""
+    repo_id = request.args.get('repository_id', type=int)
+    days = request.args.get('days', 30, type=int)
+    
+    if not repo_id:
+        return jsonify({'error': 'repository_id is required'}), 400
+    
+    metrics = metrics_calculator.get_contributor_detailed_metrics(contributor_id, repo_id, days)
+    
+    # Add contributor info
+    contributor = session.query(Contributor).get(contributor_id)
+    if contributor:
+        metrics.update({
+            'name': contributor.name,
+            'email': contributor.email,
+            'role': contributor.role,
+            'team': contributor.team,
+            'experience_level': contributor.experience_level
+        })
+    
+    return jsonify(metrics)
+
+@app.route('/api/contributors/<int:contributor_id>/activity-timeline', methods=['GET'])
+def get_contributor_activity_timeline(contributor_id):
+    """Get activity timeline for a contributor"""
+    repo_id = request.args.get('repository_id', type=int)
+    days = request.args.get('days', 30, type=int)
+    
+    if not repo_id:
+        return jsonify({'error': 'repository_id is required'}), 400
+    
+    timeline = metrics_calculator.get_contributor_activity_timeline(contributor_id, repo_id, days)
+    return jsonify(timeline)
+
+@app.route('/api/contributors/compare', methods=['POST'])
+def compare_contributors():
+    """Compare multiple contributors"""
+    data = request.get_json()
+    
+    if not data or 'contributor_ids' not in data or 'repository_id' not in data:
+        return jsonify({'error': 'contributor_ids and repository_id are required'}), 400
+    
+    contributor_ids = data['contributor_ids']
+    repo_id = data['repository_id']
+    days = data.get('days', 30)
+    
+    if not isinstance(contributor_ids, list) or len(contributor_ids) == 0:
+        return jsonify({'error': 'contributor_ids must be a non-empty list'}), 400
+    
+    comparison = metrics_calculator.compare_contributors(contributor_ids, repo_id, days)
+    return jsonify(comparison)
+
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')

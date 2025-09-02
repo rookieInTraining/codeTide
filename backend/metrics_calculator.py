@@ -174,7 +174,7 @@ class MetricsCalculator:
                 Commit, Commit.contributor_id == Contributor.id
             ).filter(
                 Commit.repository_id == repository_id
-            ).group_by(Contributor.id).all()
+            ).group_by(Contributor.id).order_by(desc(func.count(Commit.id))).all()
             
             # For lifetime, calculate actual days for velocity
             result = []
@@ -232,7 +232,7 @@ class MetricsCalculator:
                 Commit.commit_date >= start_date,
                 Commit.commit_date <= end_date
             )
-        ).group_by(Contributor.id).all()
+        ).group_by(Contributor.id).order_by(desc(func.count(Commit.id))).all()
         
         return [{
             'contributor_id': stat.id,
@@ -396,3 +396,201 @@ class MetricsCalculator:
             'team_size': stat.team_size,
             'avg_commits_per_member': stat.total_commits / max(stat.team_size, 1)
         } for stat in team_stats]
+    
+    def get_contributor_detailed_metrics(self, contributor_id, repository_id, days=30):
+        """Get detailed metrics for a specific contributor"""
+        end_date = datetime.utcnow()
+        
+        # Handle special cases for date ranges
+        if days == 0:  # Lifetime
+            commits_query = self.session.query(Commit).filter(
+                and_(
+                    Commit.contributor_id == contributor_id,
+                    Commit.repository_id == repository_id
+                )
+            )
+        elif days == 365:  # Year to date
+            start_date = datetime(end_date.year, 1, 1)
+            commits_query = self.session.query(Commit).filter(
+                and_(
+                    Commit.contributor_id == contributor_id,
+                    Commit.repository_id == repository_id,
+                    Commit.commit_date >= start_date,
+                    Commit.commit_date <= end_date
+                )
+            )
+        else:  # Regular days back from now
+            start_date = end_date - timedelta(days=days)
+            commits_query = self.session.query(Commit).filter(
+                and_(
+                    Commit.contributor_id == contributor_id,
+                    Commit.repository_id == repository_id,
+                    Commit.commit_date >= start_date,
+                    Commit.commit_date <= end_date
+                )
+            )
+        
+        commits = commits_query.all()
+        
+        if not commits:
+            return {
+                'contributor_id': contributor_id,
+                'total_commits': 0,
+                'lines_added': 0,
+                'lines_deleted': 0,
+                'files_modified': 0,
+                'avg_files_per_commit': 0,
+                'commit_velocity': 0,
+                'code_churn_ratio': 0,
+                'commit_types': {},
+                'activity_pattern': {},
+                'file_expertise': {}
+            }
+        
+        # Basic metrics
+        total_commits = len(commits)
+        total_lines_added = sum(c.lines_added or 0 for c in commits)
+        total_lines_deleted = sum(c.lines_deleted or 0 for c in commits)
+        total_files_modified = sum(c.files_changed or 0 for c in commits)
+        
+        # Calculate velocity
+        if days == 0:  # Lifetime
+            first_commit = min(commits, key=lambda c: c.commit_date)
+            actual_days = max((end_date - first_commit.commit_date).days, 1)
+        elif days == 365:
+            actual_days = (end_date - datetime(end_date.year, 1, 1)).days + 1
+        else:
+            actual_days = days
+        
+        velocity = total_commits / actual_days
+        
+        # Commit type distribution
+        commit_types = {}
+        for commit in commits:
+            commit_type = commit.commit_type or 'other'
+            commit_types[commit_type] = commit_types.get(commit_type, 0) + 1
+        
+        # Activity pattern (hour of day)
+        activity_pattern = {}
+        for commit in commits:
+            hour = commit.commit_date.hour
+            activity_pattern[hour] = activity_pattern.get(hour, 0) + 1
+        
+        # File expertise (get file types from commit files)
+        commit_ids = [c.id for c in commits]
+        if commit_ids:
+            file_types = self.session.query(
+                CommitFile.file_type,
+                func.count(CommitFile.id).label('count'),
+                func.sum(CommitFile.lines_added + CommitFile.lines_deleted).label('total_changes')
+            ).filter(
+                CommitFile.commit_id.in_(commit_ids)
+            ).group_by(CommitFile.file_type).all()
+            
+            file_expertise = {
+                ft.file_type or 'unknown': {
+                    'files_modified': ft.count,
+                    'total_changes': ft.total_changes or 0
+                } for ft in file_types
+            }
+        else:
+            file_expertise = {}
+        
+        return {
+            'contributor_id': contributor_id,
+            'total_commits': total_commits,
+            'lines_added': total_lines_added,
+            'lines_deleted': total_lines_deleted,
+            'files_modified': total_files_modified,
+            'avg_files_per_commit': round(total_files_modified / total_commits, 2),
+            'commit_velocity': round(velocity, 3),
+            'code_churn_ratio': round(total_lines_added / max(total_lines_deleted, 1), 2),
+            'commit_types': commit_types,
+            'activity_pattern': activity_pattern,
+            'file_expertise': file_expertise
+        }
+    
+    def get_contributor_activity_timeline(self, contributor_id, repository_id, days=30):
+        """Get daily activity timeline for a contributor"""
+        end_date = datetime.utcnow()
+        
+        # Handle special cases for date ranges
+        if days == 0:  # Lifetime
+            daily_activity = self.session.query(
+                func.date(Commit.commit_date).label('date'),
+                func.count(Commit.id).label('commits'),
+                func.sum(Commit.lines_added).label('lines_added'),
+                func.sum(Commit.lines_deleted).label('lines_deleted'),
+                func.sum(Commit.files_changed).label('files_changed')
+            ).filter(
+                and_(
+                    Commit.contributor_id == contributor_id,
+                    Commit.repository_id == repository_id
+                )
+            ).group_by(func.date(Commit.commit_date)).all()
+        elif days == 365:  # Year to date
+            start_date = datetime(end_date.year, 1, 1)
+            daily_activity = self.session.query(
+                func.date(Commit.commit_date).label('date'),
+                func.count(Commit.id).label('commits'),
+                func.sum(Commit.lines_added).label('lines_added'),
+                func.sum(Commit.lines_deleted).label('lines_deleted'),
+                func.sum(Commit.files_changed).label('files_changed')
+            ).filter(
+                and_(
+                    Commit.contributor_id == contributor_id,
+                    Commit.repository_id == repository_id,
+                    Commit.commit_date >= start_date,
+                    Commit.commit_date <= end_date
+                )
+            ).group_by(func.date(Commit.commit_date)).all()
+        else:  # Regular days back from now
+            start_date = end_date - timedelta(days=days)
+            daily_activity = self.session.query(
+                func.date(Commit.commit_date).label('date'),
+                func.count(Commit.id).label('commits'),
+                func.sum(Commit.lines_added).label('lines_added'),
+                func.sum(Commit.lines_deleted).label('lines_deleted'),
+                func.sum(Commit.files_changed).label('files_changed')
+            ).filter(
+                and_(
+                    Commit.contributor_id == contributor_id,
+                    Commit.repository_id == repository_id,
+                    Commit.commit_date >= start_date,
+                    Commit.commit_date <= end_date
+                )
+            ).group_by(func.date(Commit.commit_date)).all()
+        
+        return [{
+            'date': str(activity.date),
+            'commits': activity.commits,
+            'lines_added': activity.lines_added or 0,
+            'lines_deleted': activity.lines_deleted or 0,
+            'files_changed': activity.files_changed or 0
+        } for activity in daily_activity]
+    
+    def compare_contributors(self, contributor_ids, repository_id, days=30):
+        """Compare multiple contributors side by side"""
+        comparison_data = []
+        
+        for contributor_id in contributor_ids:
+            # Get contributor info
+            contributor = self.session.query(Contributor).get(contributor_id)
+            if not contributor:
+                continue
+            
+            # Get detailed metrics
+            metrics = self.get_contributor_detailed_metrics(contributor_id, repository_id, days)
+            
+            # Add contributor info to metrics
+            metrics.update({
+                'name': contributor.name,
+                'email': contributor.email,
+                'role': contributor.role,
+                'team': contributor.team,
+                'experience_level': contributor.experience_level
+            })
+            
+            comparison_data.append(metrics)
+        
+        return comparison_data

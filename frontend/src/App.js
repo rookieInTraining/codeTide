@@ -38,8 +38,26 @@ const theme = createTheme({
 });
 
 function App() {
+  // Persistent state management
+  const getStoredState = (key, defaultValue) => {
+    try {
+      const stored = localStorage.getItem(`app_${key}`);
+      return stored ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  const setStoredState = (key, value) => {
+    try {
+      localStorage.setItem(`app_${key}`, JSON.stringify(value));
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
   const [repositories, setRepositories] = useState([]);
-  const [selectedRepo, setSelectedRepo] = useState(null);
+  const [selectedRepo, setSelectedRepo] = useState(() => getStoredState('selectedRepo', null));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const location = useLocation();
@@ -54,8 +72,22 @@ function App() {
       if (!response.ok) throw new Error('Failed to fetch repositories');
       const data = await response.json();
       setRepositories(data);
-      if (data.length > 0 && !selectedRepo) {
+      
+      // Restore selected repo from storage or default to first
+      const storedRepo = getStoredState('selectedRepo', null);
+      if (storedRepo) {
+        // Find the stored repo in the current list
+        const foundRepo = data.find(r => r.id === storedRepo.id);
+        if (foundRepo) {
+          setSelectedRepo(foundRepo);
+        } else if (data.length > 0) {
+          // Fallback to first repo if stored repo not found
+          setSelectedRepo(data[0]);
+          setStoredState('selectedRepo', data[0]);
+        }
+      } else if (data.length > 0 && !selectedRepo) {
         setSelectedRepo(data[0]);
+        setStoredState('selectedRepo', data[0]);
       }
       setLoading(false);
     } catch (err) {
@@ -180,6 +212,7 @@ function App() {
                               onChange={(e) => {
                                 const repo = repositories.find(r => r.id === e.target.value);
                                 setSelectedRepo(repo);
+                                setStoredState('selectedRepo', repo);
                               }}
                               label="Select Repository"
                             >
