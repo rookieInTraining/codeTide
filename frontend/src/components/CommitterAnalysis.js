@@ -49,24 +49,31 @@ import {
   KeyboardArrowUp as KeyboardArrowUpIcon
 } from '@mui/icons-material';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
   Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar
-} from 'recharts';
+  Legend,
+  ArcElement,
+  BarElement
+} from 'chart.js';
+import { Line, Pie, Bar } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  BarElement
+);
+
 
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
@@ -225,12 +232,23 @@ function CommitterAnalysis() {
     const metrics = {};
     for (const contributorId of selectedContributors) {
       try {
-        const response = await fetch(
+        // Fetch detailed metrics
+        const metricsResponse = await fetch(
           `http://localhost:5000/api/contributors/${contributorId}/metrics?repository_id=${selectedRepository.id}&days=${timeRange}`
         );
-        if (response.ok) {
-          const data = await response.json();
-          metrics[contributorId] = data;
+        if (metricsResponse.ok) {
+          const metricsData = await metricsResponse.json();
+          
+          // Fetch activity timeline for actual dates
+          const timelineResponse = await fetch(
+            `http://localhost:5000/api/contributors/${contributorId}/activity-timeline?repository_id=${selectedRepository.id}&days=${timeRange}`
+          );
+          if (timelineResponse.ok) {
+            const timelineData = await timelineResponse.json();
+            metricsData.activity_timeline = timelineData;
+          }
+          
+          metrics[contributorId] = metricsData;
         }
       } catch (err) {
         console.error(`Failed to fetch metrics for contributor ${contributorId}:`, err);
@@ -333,30 +351,169 @@ function CommitterAnalysis() {
       case 30: return 'Last 30 days';
       case 90: return 'Last 3 months';
       case 365: return 'Year to date';
-      case 0: return 'All time';
+      case 0: return 'Lifetime';
       default: return `Last ${days} days`;
+    }
+  };
+
+  const getActivityGranularity = (days) => {
+    if (days === 0) return 'month'; // Lifetime
+    if (days === 365) return 'month'; // Year to date
+    if (days <= 7) return 'hour';
+    if (days <= 30) return 'day';
+    if (days <= 90) return 'week';
+    return 'month';
+  };
+
+  const getActivityAxisLabel = (days) => {
+    const granularity = getActivityGranularity(days);
+    console.log('Time range:', days, 'Granularity:', granularity);
+    switch (granularity) {
+      case 'hour': return 'Hour of Day';
+      case 'day': return 'Day';
+      case 'week': return 'Week';
+      case 'month': return 'Month';
+      default: return 'Time Period';
     }
   };
 
   const formatActivityData = (contributorId) => {
     const metrics = contributorMetrics[contributorId];
-    if (!metrics || !metrics.activity_pattern) return [];
+    console.log('formatActivityData called for contributor:', contributorId, 'timeRange:', timeRange, 'metrics:', metrics);
     
-    return Object.entries(metrics.activity_pattern).map(([hour, commits]) => ({
-      hour: `${hour}:00`,
-      commits
-    })).sort((a, b) => parseInt(a.hour) - parseInt(b.hour));
+    if (!metrics) {
+      console.log('No metrics for contributor:', contributorId);
+      return { labels: [], datasets: [] };
+    }
+    
+    const granularity = getActivityGranularity(timeRange);
+    console.log('Granularity for timeRange', timeRange, ':', granularity);
+    
+    // For hourly granularity, use activity_pattern (hour of day)
+    if (granularity === 'hour') {
+      if (!metrics.activity_pattern) {
+        console.log('No activity pattern for contributor:', contributorId);
+        return { labels: [], datasets: [] };
+      }
+      
+      const entries = Object.entries(metrics.activity_pattern);
+      console.log('Activity pattern entries:', entries);
+      
+      if (entries.length === 0) {
+        console.log('No entries in activity pattern');
+        return { labels: [], datasets: [] };
+      }
+      
+      // Sort by hour for proper display
+      entries.sort(([a], [b]) => parseInt(a) - parseInt(b));
+      
+      const result = {
+        labels: entries.map(([hour]) => `${hour}:00`),
+        datasets: [{
+          label: 'Commits',
+          data: entries.map(([, commits]) => commits),
+          backgroundColor: 'rgba(54, 162, 235, 0.2)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.1
+        }]
+      };
+      console.log('Hourly data result:', result);
+      return result;
+    } else {
+      // For other granularities, use activity_timeline (actual dates)
+      if (!metrics.activity_timeline || metrics.activity_timeline.length === 0) {
+        console.log('No activity timeline for contributor:', contributorId);
+        return { labels: [], datasets: [] };
+      }
+      
+      console.log('Activity timeline entries:', metrics.activity_timeline);
+      
+      // Sort timeline by date
+      const sortedTimeline = [...metrics.activity_timeline].sort((a, b) => new Date(a.date) - new Date(b.date));
+      
+      let labels = [];
+      let data = [];
+      
+      if (granularity === 'day') {
+        // Use actual daily data
+        labels = sortedTimeline.map(item => {
+          const date = new Date(item.date);
+          return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        });
+        data = sortedTimeline.map(item => item.commits);
+      } else if (granularity === 'week') {
+        // Aggregate by week
+        const weeklyData = new Map();
+        sortedTimeline.forEach(item => {
+          const date = new Date(item.date);
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+          const weekKey = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          
+          if (!weeklyData.has(weekKey)) {
+            weeklyData.set(weekKey, 0);
+          }
+          weeklyData.set(weekKey, weeklyData.get(weekKey) + item.commits);
+        });
+        
+        labels = Array.from(weeklyData.keys());
+        data = Array.from(weeklyData.values());
+      } else if (granularity === 'month') {
+        // Aggregate by month
+        const monthlyData = new Map();
+        sortedTimeline.forEach(item => {
+          const date = new Date(item.date);
+          const monthKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+          
+          if (!monthlyData.has(monthKey)) {
+            monthlyData.set(monthKey, 0);
+          }
+          monthlyData.set(monthKey, monthlyData.get(monthKey) + item.commits);
+        });
+        
+        labels = Array.from(monthlyData.keys());
+        data = Array.from(monthlyData.values());
+      }
+      
+      const result = {
+        labels,
+        datasets: [{
+          label: 'Commits',
+          data,
+          backgroundColor: 'rgba(54, 162, 235, 0.2)',
+          borderColor: 'rgba(54, 162, 235, 1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.1
+        }]
+      };
+      console.log('Timeline-based data result:', result);
+      return result;
+    }
   };
 
   const formatCommitTypeData = (contributorId) => {
     const metrics = contributorMetrics[contributorId];
-    if (!metrics || !metrics.commit_types) return [];
+    if (!metrics || !metrics.commit_types) return { labels: [], datasets: [] };
     
-    return Object.entries(metrics.commit_types).map(([type, count], index) => ({
-      name: type,
-      value: count,
-      fill: COLORS[index % COLORS.length]
-    }));
+    const entries = Object.entries(metrics.commit_types);
+    return {
+      labels: entries.map(([type]) => type.charAt(0).toUpperCase() + type.slice(1)),
+      datasets: [{
+        data: entries.map(([, count]) => count),
+        backgroundColor: [
+          '#FF6384',
+          '#36A2EB', 
+          '#FFCE56',
+          '#4BC0C0',
+          '#9966FF',
+          '#FF9F40'
+        ],
+        borderWidth: 1
+      }]
+    };
   };
 
   if (loading) {
@@ -737,24 +894,29 @@ function CommitterAnalysis() {
                             <Typography variant="h6" gutterBottom>
                               Commit Types
                             </Typography>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={formatCommitTypeData(contributorId)}
-                                  cx="50%"
-                                  cy="50%"
-                                  outerRadius={80}
-                                  fill="#8884d8"
-                                  dataKey="value"
-                                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                >
-                                  {formatCommitTypeData(contributorId).map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                                  ))}
-                                </Pie>
-                                <Tooltip />
-                              </PieChart>
-                            </ResponsiveContainer>
+                            <Box sx={{ height: 250, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                              <Pie 
+                                data={formatCommitTypeData(contributorId)}
+                                options={{
+                                  responsive: true,
+                                  maintainAspectRatio: false,
+                                  plugins: {
+                                    legend: {
+                                      position: 'bottom'
+                                    },
+                                    tooltip: {
+                                      callbacks: {
+                                        label: (context) => {
+                                          const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                          const percentage = ((context.raw / total) * 100).toFixed(1);
+                                          return `${context.label}: ${context.raw} (${percentage}%)`;
+                                        }
+                                      }
+                                    }
+                                  }
+                                }}
+                              />
+                            </Box>
                           </Paper>
                         </Grid>
 
@@ -764,15 +926,45 @@ function CommitterAnalysis() {
                             <Typography variant="h6" gutterBottom>
                               Activity by Hour
                             </Typography>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={formatActivityData(contributorId)}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="hour" />
-                                <YAxis />
-                                <Tooltip />
-                                <Bar dataKey="commits" fill="#8884d8" />
-                              </BarChart>
-                            </ResponsiveContainer>
+                            <Box sx={{ height: 250 }}>
+                              <Bar 
+                                key={`bar-${contributorId}-${timeRange}`}
+                                data={formatActivityData(contributorId)}
+                                options={{
+                                  responsive: true,
+                                  maintainAspectRatio: false,
+                                  plugins: {
+                                    legend: {
+                                      display: false
+                                    },
+                                    tooltip: {
+                                      callbacks: {
+                                        title: (context) => {
+                                          const granularity = getActivityGranularity(timeRange);
+                                          return granularity === 'hour' ? `Hour: ${context[0].label}` : `${context[0].label}`;
+                                        },
+                                        label: (context) => `Commits: ${context.raw}`
+                                      }
+                                    }
+                                  },
+                                  scales: {
+                                    y: {
+                                      beginAtZero: true,
+                                      title: {
+                                        display: true,
+                                        text: 'Number of Commits'
+                                      }
+                                    },
+                                    x: {
+                                      title: {
+                                        display: true,
+                                        text: getActivityAxisLabel(timeRange)
+                                      }
+                                    }
+                                  }
+                                }}
+                              />
+                            </Box>
                           </Paper>
                         </Grid>
                       </Grid>
@@ -953,20 +1145,59 @@ function CommitterAnalysis() {
                         </Box>
                         
                         <Box sx={{ height: 300 }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={formatActivityData(contributorId)}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="hour" />
-                              <YAxis />
-                              <Tooltip />
-                              <Line 
-                                type="monotone" 
-                                dataKey="commits" 
-                                stroke="#8884d8" 
-                                strokeWidth={2}
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
+                          {formatActivityData(contributorId).labels.length > 0 ? (
+                            <Line 
+                              key={`line-${contributorId}-${timeRange}`}
+                              data={formatActivityData(contributorId)}
+                              options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                  legend: {
+                                    display: false
+                                  },
+                                  tooltip: {
+                                    callbacks: {
+                                      title: (context) => {
+                                        const granularity = getActivityGranularity(timeRange);
+                                        return granularity === 'hour' ? `Hour: ${context[0].label}` : `${context[0].label}`;
+                                      },
+                                      label: (context) => `Commits: ${context.raw}`
+                                    }
+                                  }
+                                },
+                                scales: {
+                                  y: {
+                                    beginAtZero: true,
+                                    title: {
+                                      display: true,
+                                      text: 'Number of Commits'
+                                    }
+                                  },
+                                  x: {
+                                    title: {
+                                      display: true,
+                                      text: getActivityAxisLabel(timeRange)
+                                    }
+                                  }
+                                }
+                              }}
+                            />
+                          ) : (
+                            <Box 
+                              sx={{ 
+                                height: '100%', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                color: 'text.secondary'
+                              }}
+                            >
+                              <Typography variant="body2">
+                                No activity pattern data available
+                              </Typography>
+                            </Box>
+                          )}
                         </Box>
                       </CardContent>
                     </Card>
