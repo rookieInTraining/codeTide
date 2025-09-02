@@ -177,14 +177,14 @@ function CommitterAnalysis() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tabValue, setTabValue] = useState(() => getStoredState('tabValue', 0));
-  const [contributorMetrics, setContributorMetrics] = useState(() => getStoredState('contributorMetrics', {}));
-  const [comparisonData, setComparisonData] = useState(() => getStoredState('comparisonData', []));
+  const [contributorMetrics, setContributorMetrics] = useState({});
+  const [comparisonData, setComparisonData] = useState([]);
   const [expandedCards, setExpandedCards] = useState({});
   const [contributorSearch, setContributorSearch] = useState('');
   const [displayedContributorsCount, setDisplayedContributorsCount] = useState(CONTRIBUTORS_PER_PAGE);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
-  const [formSubmitted, setFormSubmitted] = useState(() => getStoredState('formSubmitted', false));
+  const [formSubmitted, setFormSubmitted] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
@@ -286,7 +286,6 @@ function CommitterAnalysis() {
       
       console.log('Final contributor metrics:', metrics);
       setContributorMetrics(metrics);
-      setStoredState('contributorMetrics', metrics);
     } catch (err) {
       console.error('Failed to fetch contributor metrics:', err);
       setError('Failed to load contributor metrics. This may be due to large commit volumes.');
@@ -313,7 +312,6 @@ function CommitterAnalysis() {
       if (response.ok) {
         const data = await response.json();
         setComparisonData(data);
-        setStoredState('comparisonData', data);
       }
     } catch (err) {
       console.error('Failed to fetch comparison data:', err);
@@ -330,7 +328,6 @@ function CommitterAnalysis() {
     
     setError(null);
     setFormSubmitted(true);
-    setStoredState('formSubmitted', true);
     
     // Run metrics and comparison fetching in parallel
     const promises = [fetchContributorMetrics()];
